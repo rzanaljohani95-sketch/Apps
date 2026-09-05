@@ -38,10 +38,12 @@
           <div class="field">
             <label for="calories">🔥 السعرات اليومية</label>
             <input type="number" id="calories" min="0" placeholder="مثال: 2200">
+            <div id="caloriesBadge"></div>
           </div>
           <div class="field">
             <label for="protein">🥚 البروتين اليومي (جم)</label>
             <input type="number" id="protein" min="0" placeholder="مثال: 140">
+            <div id="proteinBadge"></div>
           </div>
         </div>
 
@@ -172,6 +174,27 @@
       <label for="weeklyGoalInput">عدد أيام التمرين المستهدفة أسبوعيًا</label>
       <input type="number" id="weeklyGoalInput" min="1" max="7">
     </div>
+
+    <p class="muted">أهدافك اليومية، وهامش طبيعي حولها يُحتسب ضمنه بلوغ الهدف (نسبة مئوية من الهدف).</p>
+    <div class="grid-2">
+      <div class="field">
+        <label for="calorieGoalInput">هدف السعرات اليومي</label>
+        <input type="number" id="calorieGoalInput" min="0">
+      </div>
+      <div class="field">
+        <label for="calorieMarginInput">هامش السعرات (%)</label>
+        <input type="number" id="calorieMarginInput" min="0" max="50">
+      </div>
+      <div class="field">
+        <label for="proteinGoalInput">هدف البروتين اليومي (جم)</label>
+        <input type="number" id="proteinGoalInput" min="0">
+      </div>
+      <div class="field">
+        <label for="proteinMarginInput">هامش البروتين (%)</label>
+        <input type="number" id="proteinMarginInput" min="0" max="50">
+      </div>
+    </div>
+
     <p class="muted">حدّد لكل قياس هل الهدف تقليله أو زيادته، ليظهر لك اللون الصحيح عند التقدّم (أخضر = تقدّم نحو هدفك).</p>
     <div id="goalDirections" class="goal-directions"></div>
     <div class="modal-actions">

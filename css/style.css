@@ -343,6 +343,25 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .delta-good { color: var(--accent-dark); }
 .delta-bad { color: var(--warn); }
 
+.goal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  width: fit-content;
+}
+.goal-badge.good { background: var(--accent-soft); color: var(--accent-dark); }
+.goal-badge.bad { background: var(--warn-soft); color: var(--warn); }
+
+.goal-badge-mini {
+  font-size: 0.85rem;
+  margin-right: 4px;
+  cursor: default;
+}
+
 .modal {
   position: fixed;
   inset: 0;

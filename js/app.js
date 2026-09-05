@@ -22,6 +22,10 @@
       measurements: [],   // [{ id, date, weight, chest, waist, lowerBelly, hips, thigh, arm, calves }]
       settings: {
         weeklyWorkoutGoal: 4,
+        calorieGoal: 1810,
+        proteinGoal: 120,
+        calorieMarginPct: 5,
+        proteinMarginPct: 8,
         goalDirections: Object.fromEntries(MEASURE_FIELDS.map(f => [f.key, f.defaultGoal])),
       },
     };
@@ -38,6 +42,10 @@
         measurements: parsed.measurements || base.measurements,
         settings: {
           weeklyWorkoutGoal: parsed.settings?.weeklyWorkoutGoal ?? base.settings.weeklyWorkoutGoal,
+          calorieGoal: parsed.settings?.calorieGoal ?? base.settings.calorieGoal,
+          proteinGoal: parsed.settings?.proteinGoal ?? base.settings.proteinGoal,
+          calorieMarginPct: parsed.settings?.calorieMarginPct ?? base.settings.calorieMarginPct,
+          proteinMarginPct: parsed.settings?.proteinMarginPct ?? base.settings.proteinMarginPct,
           goalDirections: { ...base.settings.goalDirections, ...(parsed.settings?.goalDirections || {}) },
         },
       };
@@ -93,6 +101,33 @@
     return Math.round(n * 10) / 10;
   }
 
+  /* ---------- daily goal status (calories / protein) ---------- */
+
+  function computeGoalStatus(value, goal, marginPct) {
+    if (value === null || value === undefined || !goal) return null;
+    const margin = goal * (marginPct / 100);
+    const diff = round1(value - goal);
+    if (diff === 0) return { state: 'exact', diff };
+    if (value > goal + margin) return { state: 'over', diff };
+    if (value < goal - margin) return { state: 'under', diff };
+    return { state: 'met', diff };
+  }
+
+  const GOAL_STATUS_CONFIG = {
+    exact: { icon: '🎯', cls: 'good', text: goal => `بالضبط على الهدف (${goal})` },
+    met:   { icon: '✅', cls: 'good', text: () => 'ضمن الهدف' },
+    over:  { icon: '⬆️', cls: 'bad', text: (goal, diff, unit) => `فوق الهدف بـ ${round1(Math.abs(diff))} ${unit}` },
+    under: { icon: '⬇️', cls: 'bad', text: (goal, diff, unit) => `أقل من الهدف بـ ${round1(Math.abs(diff))} ${unit}` },
+  };
+
+  function goalBadgeHtml(status, unit, goal, compact) {
+    if (!status) return '';
+    const cfg = GOAL_STATUS_CONFIG[status.state];
+    const text = cfg.text(goal, status.diff, unit);
+    if (compact) return `<span class="goal-badge-mini" title="${text}">${cfg.icon}</span>`;
+    return `<span class="goal-badge ${cfg.cls}">${cfg.icon} ${text}</span>`;
+  }
+
   /* ============================ TABS ============================ */
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -120,18 +155,33 @@
 
   dailyDateInput.addEventListener('change', loadDailyFormForDate);
 
+  const caloriesInput = document.getElementById('calories');
+  const proteinInput = document.getElementById('protein');
+  caloriesInput.addEventListener('input', updateDailyGoalBadges);
+  proteinInput.addEventListener('input', updateDailyGoalBadges);
+
+  function updateDailyGoalBadges() {
+    const cal = numOrNull(caloriesInput.value);
+    const prot = numOrNull(proteinInput.value);
+    const calStatus = computeGoalStatus(cal, state.settings.calorieGoal, state.settings.calorieMarginPct);
+    const protStatus = computeGoalStatus(prot, state.settings.proteinGoal, state.settings.proteinMarginPct);
+    document.getElementById('caloriesBadge').innerHTML = goalBadgeHtml(calStatus, 'سعرة', state.settings.calorieGoal);
+    document.getElementById('proteinBadge').innerHTML = goalBadgeHtml(protStatus, 'جم', state.settings.proteinGoal);
+  }
+
   function loadDailyFormForDate() {
     const date = dailyDateInput.value;
     const entry = state.dailyLogs[date];
     document.getElementById('steps').value = entry?.steps ?? '';
-    document.getElementById('calories').value = entry?.calories ?? '';
-    document.getElementById('protein').value = entry?.protein ?? '';
+    caloriesInput.value = entry?.calories ?? '';
+    proteinInput.value = entry?.protein ?? '';
     const w = entry?.workout;
     workoutDoneInput.checked = !!w?.done;
     workoutDetails.classList.toggle('hidden', !w?.done);
     document.getElementById('workoutType').value = w?.type ?? '';
     document.getElementById('workoutDuration').value = w?.duration ?? '';
     document.getElementById('workoutNotes').value = w?.notes ?? '';
+    updateDailyGoalBadges();
   }
 
   dailyForm.addEventListener('submit', e => {
@@ -190,13 +240,28 @@
     const calAvg = avg(nums('calories'));
     const proteinAvg = avg(nums('protein'));
 
+    const calAvgStatus = computeGoalStatus(calAvg, state.settings.calorieGoal, state.settings.calorieMarginPct);
+    const proteinAvgStatus = computeGoalStatus(proteinAvg, state.settings.proteinGoal, state.settings.proteinMarginPct);
+
     const statsEl = document.getElementById('weeklyStats');
     statsEl.innerHTML = `
       <div class="stat-box"><div class="stat-value">${stepsAvg ?? '—'}</div><div class="stat-label">متوسط الخطوات اليومي</div></div>
-      <div class="stat-box"><div class="stat-value">${calAvg ?? '—'}</div><div class="stat-label">متوسط السعرات اليومي</div></div>
-      <div class="stat-box"><div class="stat-value">${proteinAvg ?? '—'} جم</div><div class="stat-label">متوسط البروتين اليومي</div></div>
+      <div class="stat-box"><div class="stat-value">${calAvg ?? '—'}</div><div class="stat-label">متوسط السعرات اليومي</div>${goalBadgeHtml(calAvgStatus, 'سعرة', state.settings.calorieGoal, true)}</div>
+      <div class="stat-box"><div class="stat-value">${proteinAvg ?? '—'} جم</div><div class="stat-label">متوسط البروتين اليومي</div>${goalBadgeHtml(proteinAvgStatus, 'جم', state.settings.proteinGoal, true)}</div>
       <div class="stat-box"><div class="stat-value">${workoutDays}</div><div class="stat-label">أيام تمرين هذا الأسبوع</div></div>
     `;
+  }
+
+  function calorieCellHtml(value) {
+    if (value === null || value === undefined) return '—';
+    const status = computeGoalStatus(value, state.settings.calorieGoal, state.settings.calorieMarginPct);
+    return `${value}${goalBadgeHtml(status, 'سعرة', state.settings.calorieGoal, true)}`;
+  }
+
+  function proteinCellHtml(value) {
+    if (value === null || value === undefined) return '—';
+    const status = computeGoalStatus(value, state.settings.proteinGoal, state.settings.proteinMarginPct);
+    return `${value}${goalBadgeHtml(status, 'جم', state.settings.proteinGoal, true)}`;
   }
 
   function renderRecentDailyTable() {
@@ -217,8 +282,8 @@
       return `<tr>
         <td>${formatDateAr(d)}</td>
         <td>${e.steps ?? '—'}</td>
-        <td>${e.calories ?? '—'}</td>
-        <td>${e.protein ?? '—'}</td>
+        <td>${calorieCellHtml(e.calories)}</td>
+        <td>${proteinCellHtml(e.protein)}</td>
         <td>${w?.done ? '✅' : '—'}</td>
         <td>${details}</td>
         <td><button class="btn-icon-small" data-del="${d}" title="حذف">🗑️</button></td>
@@ -234,8 +299,8 @@
     return `<tr>
       <td>${formatDateAr(d)}</td>
       <td>${e.steps ?? '—'}</td>
-      <td>${e.calories ?? '—'}</td>
-      <td>${e.protein ?? '—'}</td>
+      <td>${calorieCellHtml(e.calories)}</td>
+      <td>${proteinCellHtml(e.protein)}</td>
       <td>${e.workout?.done ? '✅' : '—'}</td>
       <td><button class="btn-icon-small" data-del="${d}" title="حذف">🗑️</button></td>
     </tr>`;
@@ -498,6 +563,10 @@
 
   function openSettings() {
     document.getElementById('weeklyGoalInput').value = state.settings.weeklyWorkoutGoal;
+    document.getElementById('calorieGoalInput').value = state.settings.calorieGoal;
+    document.getElementById('calorieMarginInput').value = state.settings.calorieMarginPct;
+    document.getElementById('proteinGoalInput').value = state.settings.proteinGoal;
+    document.getElementById('proteinMarginInput').value = state.settings.proteinMarginPct;
     const el = document.getElementById('goalDirections');
     el.innerHTML = MEASURE_FIELDS.map(f => `
       <div class="goal-direction-row">
@@ -514,6 +583,10 @@
   function closeSettings() {
     const goal = Number(document.getElementById('weeklyGoalInput').value) || 4;
     state.settings.weeklyWorkoutGoal = Math.min(7, Math.max(1, goal));
+    state.settings.calorieGoal = Number(document.getElementById('calorieGoalInput').value) || state.settings.calorieGoal;
+    state.settings.proteinGoal = Number(document.getElementById('proteinGoalInput').value) || state.settings.proteinGoal;
+    state.settings.calorieMarginPct = Math.max(0, Number(document.getElementById('calorieMarginInput').value) || 0);
+    state.settings.proteinMarginPct = Math.max(0, Number(document.getElementById('proteinMarginInput').value) || 0);
     document.querySelectorAll('#goalDirections [data-goal]').forEach(sel => {
       state.settings.goalDirections[sel.dataset.goal] = sel.value;
     });
