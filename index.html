@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>متابعة الأداء الصحي والرياضي</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>📊 متابعة الأداء الصحي والرياضي</h1>
+  <button id="settingsBtn" class="icon-btn" title="الإعدادات">⚙️</button>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="today">اليوم</button>
+  <button class="tab-btn" data-tab="measurements">القياسات الأسبوعية</button>
+  <button class="tab-btn" data-tab="history">السجل</button>
+</nav>
+
+<main>
+  <!-- ===================== TODAY TAB ===================== -->
+  <section id="tab-today" class="tab-panel active">
+
+    <div class="card">
+      <h2>تسجيل اليوم</h2>
+      <form id="dailyForm">
+        <div class="field">
+          <label for="dailyDate">التاريخ</label>
+          <input type="date" id="dailyDate" required>
+        </div>
+
+        <div class="grid-3">
+          <div class="field">
+            <label for="steps">🚶 الخطوات اليومية</label>
+            <input type="number" id="steps" min="0" placeholder="مثال: 8000">
+          </div>
+          <div class="field">
+            <label for="calories">🔥 السعرات اليومية</label>
+            <input type="number" id="calories" min="0" placeholder="مثال: 2200">
+          </div>
+          <div class="field">
+            <label for="protein">🥚 البروتين اليومي (جم)</label>
+            <input type="number" id="protein" min="0" placeholder="مثال: 140">
+          </div>
+        </div>
+
+        <div class="field checkbox-field">
+          <label class="switch-label">
+            <input type="checkbox" id="workoutDone">
+            <span>🏋️ تمرّنت اليوم؟</span>
+          </label>
+        </div>
+
+        <div id="workoutDetails" class="grid-2 hidden">
+          <div class="field">
+            <label for="workoutType">نوع التمرين</label>
+            <input type="text" id="workoutType" placeholder="مثال: صدر وترايسبس">
+          </div>
+          <div class="field">
+            <label for="workoutDuration">مدة التمرين (دقيقة)</label>
+            <input type="number" id="workoutDuration" min="0" placeholder="مثال: 60">
+          </div>
+          <div class="field span-2">
+            <label for="workoutNotes">ملاحظات</label>
+            <textarea id="workoutNotes" rows="2" placeholder="ملاحظات إضافية..."></textarea>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">حفظ اليوم</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>تقدّم هذا الأسبوع</h2>
+      <div id="weeklyWorkoutProgress"></div>
+      <div id="weeklyStats" class="stats-grid"></div>
+    </div>
+
+    <div class="card">
+      <h2>آخر الأيام المسجّلة</h2>
+      <div class="table-wrap">
+        <table id="recentDailyTable">
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>خطوات</th>
+              <th>سعرات</th>
+              <th>بروتين</th>
+              <th>تمرين</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== MEASUREMENTS TAB ===================== -->
+  <section id="tab-measurements" class="tab-panel">
+
+    <div class="card">
+      <h2>تسجيل قياسات الجسم</h2>
+      <form id="measureForm">
+        <div class="field">
+          <label for="measureDate">تاريخ القياس</label>
+          <input type="date" id="measureDate" required>
+        </div>
+        <div class="grid-4" id="measureFields"></div>
+        <button type="submit" class="btn-primary">حفظ القياسات</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>الرسم البياني للتقدّم الأسبوعي</h2>
+      <div class="chart-controls">
+        <label for="chartMetric">القياس:</label>
+        <select id="chartMetric"></select>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="progressChart" width="800" height="320"></canvas>
+      </div>
+      <p id="chartEmptyMsg" class="muted hidden">لا توجد بيانات كافية بعد — سجّل قياسين على الأقل ليظهر الرسم البياني.</p>
+    </div>
+
+    <div class="card">
+      <h2>ملخّص آخر تغيّر</h2>
+      <div id="deltaSummary" class="delta-grid"></div>
+    </div>
+
+    <div class="card">
+      <h2>سجل القياسات</h2>
+      <div class="table-wrap">
+        <table id="measureTable">
+          <thead><tr id="measureTableHead"></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HISTORY TAB ===================== -->
+  <section id="tab-history" class="tab-panel">
+    <div class="card">
+      <h2>كل الأيام المسجّلة</h2>
+      <div class="table-wrap">
+        <table id="fullDailyTable">
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>خطوات</th>
+              <th>سعرات</th>
+              <th>بروتين</th>
+              <th>تمرين</th>
+              <th>تفاصيل التمرين</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ===================== SETTINGS MODAL ===================== -->
+<div id="settingsModal" class="modal hidden">
+  <div class="modal-content">
+    <h2>الإعدادات</h2>
+    <div class="field">
+      <label for="weeklyGoalInput">عدد أيام التمرين المستهدفة أسبوعيًا</label>
+      <input type="number" id="weeklyGoalInput" min="1" max="7">
+    </div>
+    <p class="muted">حدّد لكل قياس هل الهدف تقليله أو زيادته، ليظهر لك اللون الصحيح عند التقدّم (أخضر = تقدّم نحو هدفك).</p>
+    <div id="goalDirections" class="goal-directions"></div>
+    <div class="modal-actions">
+      <button id="closeSettings" class="btn-primary">حفظ وإغلاق</button>
+      <button id="exportData" class="btn-secondary">تصدير البيانات (JSON)</button>
+      <button id="importDataBtn" class="btn-secondary">استيراد البيانات</button>
+      <input type="file" id="importDataInput" accept="application/json" class="hidden">
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
