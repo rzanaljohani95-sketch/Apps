@@ -350,6 +350,17 @@
   chartMetricSelect.innerHTML = MEASURE_FIELDS.map(f => `<option value="${f.key}">${f.label}</option>`).join('');
   chartMetricSelect.addEventListener('change', renderChart);
 
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '');
+    const bigint = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+    const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   function renderChart() {
     const canvas = document.getElementById('progressChart');
     const ctx = canvas.getContext('2d');
@@ -369,22 +380,31 @@
     }
     emptyMsg.classList.add('hidden');
 
+    const colorBorder = cssVar('--border') || '#dbe1d7';
+    const colorMuted = cssVar('--muted') || '#5c6b63';
+    const colorInk = cssVar('--ink') || '#182420';
+    const colorAccent = cssVar('--accent') || '#1f7a4d';
+    const colorWarn = cssVar('--warn') || '#b5622c';
+
     const W = canvas.width, H = canvas.height;
-    const padL = 50, padR = 20, padT = 20, padB = 40;
+    const padL = 52, padR = 20, padT = 24, padB = 40;
     const plotW = W - padL - padR;
     const plotH = H - padT - padB;
 
     const values = points.map(p => p[metric]);
     let min = Math.min(...values), max = Math.max(...values);
     if (min === max) { min -= 1; max += 1; }
-    const pad = (max - min) * 0.15;
+    const pad = (max - min) * 0.2;
     min -= pad; max += pad;
 
-    // axes
-    ctx.strokeStyle = '#e5e7eb';
+    const xFor = i => padL + (points.length === 1 ? plotW / 2 : (plotW * i) / (points.length - 1));
+    const yFor = v => padT + plotH - ((v - min) / (max - min)) * plotH;
+
+    // faint grid + axis values
+    ctx.strokeStyle = colorBorder;
     ctx.lineWidth = 1;
-    ctx.font = '11px sans-serif';
-    ctx.fillStyle = '#6b7280';
+    ctx.font = '11px "IBM Plex Sans Arabic", sans-serif';
+    ctx.fillStyle = colorMuted;
     const gridLines = 4;
     for (let i = 0; i <= gridLines; i++) {
       const y = padT + (plotH * i) / gridLines;
@@ -397,60 +417,77 @@
       ctx.fillText(round1(val).toString(), 6, y + 4);
     }
 
-    const xFor = i => padL + (points.length === 1 ? plotW / 2 : (plotW * i) / (points.length - 1));
-    const yFor = v => padT + plotH - ((v - min) / (max - min)) * plotH;
-
-    // line
-    ctx.strokeStyle = '#16a34a';
-    ctx.lineWidth = 2.5;
+    // area fill under the line
     ctx.beginPath();
+    ctx.moveTo(xFor(0), yFor(points[0][metric]));
+    points.forEach((p, i) => ctx.lineTo(xFor(i), yFor(p[metric])));
+    ctx.lineTo(xFor(points.length - 1), padT + plotH);
+    ctx.lineTo(xFor(0), padT + plotH);
+    ctx.closePath();
+    ctx.fillStyle = hexToRgba(colorAccent, 0.12);
+    ctx.fill();
+
+    // segments coloured by whether the change matches the user's goal
     points.forEach((p, i) => {
-      const x = xFor(i), y = yFor(p[metric]);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      if (i === 0) return;
+      const prevVal = points[i - 1][metric];
+      const diff = p[metric] - prevVal;
+      const goal = state.settings.goalDirections[metric];
+      let color = colorMuted;
+      if (diff !== 0 && goal) {
+        const improved = (goal === 'down' && diff < 0) || (goal === 'up' && diff > 0);
+        color = improved ? colorAccent : colorWarn;
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(xFor(i - 1), yFor(prevVal));
+      ctx.lineTo(xFor(i), yFor(p[metric]));
+      ctx.stroke();
     });
-    ctx.stroke();
 
-    // points + segment colour (up=red, down=green) + labels
+    // points + date labels
     points.forEach((p, i) => {
       const x = xFor(i), y = yFor(p[metric]);
+      const isLast = i === points.length - 1;
 
-      if (i > 0) {
-        const prevVal = points[i - 1][metric];
-        const diff = p[metric] - prevVal;
-        const goal = state.settings.goalDirections[metric];
-        let color = '#9ca3af';
-        if (diff !== 0 && goal) {
-          const improved = (goal === 'down' && diff < 0) || (goal === 'up' && diff > 0);
-          color = improved ? '#16a34a' : '#dc2626';
-        }
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
+      if (isLast) {
         ctx.beginPath();
-        ctx.moveTo(xFor(i - 1), yFor(prevVal));
-        ctx.lineTo(x, y);
-        ctx.stroke();
+        ctx.arc(x, y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = hexToRgba(colorAccent, 0.18);
+        ctx.fill();
       }
 
-      ctx.fillStyle = '#15803d';
       ctx.beginPath();
-      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.arc(x, y, isLast ? 5 : 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = isLast ? colorAccent : cssVar('--surface') || '#fff';
       ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = colorAccent;
+      ctx.stroke();
 
-      // date label (skip some if crowded)
       const showEvery = Math.ceil(points.length / 8);
-      if (i % showEvery === 0 || i === points.length - 1) {
-        ctx.fillStyle = '#6b7280';
+      if (i % showEvery === 0 || isLast) {
+        ctx.fillStyle = colorMuted;
         ctx.textAlign = 'center';
         const label = new Date(p.date + 'T00:00:00').toLocaleDateString('ar-u-ca-gregory', { month: 'numeric', day: 'numeric' });
-        ctx.fillText(label, x, H - padB + 16);
+        ctx.fillText(label, x, H - padB + 18);
       }
     });
 
-    // title
-    ctx.fillStyle = '#1f2937';
-    ctx.font = 'bold 13px sans-serif';
+    // last-value callout
+    ctx.fillStyle = colorInk;
+    ctx.font = 'bold 13px "IBM Plex Sans Arabic", sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`${field.label} (${field.unit})`, W - padR, 14);
+    const last = points[points.length - 1][metric];
+    ctx.fillText(`${field.label}: ${round1(last)} ${field.unit}`, W - padR, 16);
+  }
+
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (document.getElementById('tab-measurements').classList.contains('active')) renderChart();
+    });
   }
 
   /* ============================ SETTINGS MODAL ============================ */
