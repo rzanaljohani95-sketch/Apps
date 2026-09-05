@@ -101,6 +101,36 @@
     return Math.round(n * 10) / 10;
   }
 
+  /* ---------- in-page confirm/toast (native confirm()/alert() are blocked in some mobile app views) ---------- */
+
+  function showConfirm(message, onYes) {
+    const modal = document.getElementById('confirmModal');
+    document.getElementById('confirmMessage').textContent = message;
+    const yesBtn = document.getElementById('confirmYesBtn');
+    const noBtn = document.getElementById('confirmNoBtn');
+
+    const cleanup = () => {
+      modal.classList.add('hidden');
+      yesBtn.removeEventListener('click', onYesClick);
+      noBtn.removeEventListener('click', onNoClick);
+    };
+    const onYesClick = () => { cleanup(); onYes(); };
+    const onNoClick = () => cleanup();
+
+    yesBtn.addEventListener('click', onYesClick);
+    noBtn.addEventListener('click', onNoClick);
+    modal.classList.remove('hidden');
+  }
+
+  let toastTimer = null;
+  function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.add('hidden'), 2800);
+  }
+
   /* ---------- daily goal status (calories / protein) ---------- */
 
   function computeGoalStatus(value, goal, marginPct) {
@@ -211,10 +241,12 @@
   }
 
   function deleteDailyLog(date) {
-    if (!confirm(`حذف تسجيل يوم ${formatDateAr(date)}؟`)) return;
-    delete state.dailyLogs[date];
-    saveState();
-    renderAll();
+    showConfirm(`حذف تسجيل يوم ${formatDateAr(date)}؟`, () => {
+      delete state.dailyLogs[date];
+      saveState();
+      renderAll();
+      showToast('تم الحذف.');
+    });
   }
 
   /* ---------- weekly workout progress + weekly stats ---------- */
@@ -341,10 +373,12 @@
   });
 
   function deleteMeasurement(id) {
-    if (!confirm('حذف هذا القياس؟')) return;
-    state.measurements = state.measurements.filter(m => m.id !== id);
-    saveState();
-    renderAll();
+    showConfirm('حذف هذا القياس؟', () => {
+      state.measurements = state.measurements.filter(m => m.id !== id);
+      saveState();
+      renderAll();
+      showToast('تم الحذف.');
+    });
   }
 
   function renderMeasureTable() {
@@ -612,22 +646,27 @@
     reader.onload = () => {
       try {
         const parsed = JSON.parse(reader.result);
-        if (!confirm('سيتم استبدال جميع البيانات الحالية بالبيانات المستوردة. متابعة؟')) return;
         const base = defaultState();
-        state = {
-          dailyLogs: parsed.dailyLogs || base.dailyLogs,
-          measurements: parsed.measurements || base.measurements,
-          settings: {
-            weeklyWorkoutGoal: parsed.settings?.weeklyWorkoutGoal ?? base.settings.weeklyWorkoutGoal,
-            goalDirections: { ...base.settings.goalDirections, ...(parsed.settings?.goalDirections || {}) },
-          },
-        };
-        saveState();
-        renderAll();
-        closeSettings();
-        alert('تم استيراد البيانات بنجاح.');
+        showConfirm('سيتم استبدال جميع البيانات الحالية بالبيانات المستوردة. متابعة؟', () => {
+          state = {
+            dailyLogs: parsed.dailyLogs || base.dailyLogs,
+            measurements: parsed.measurements || base.measurements,
+            settings: {
+              weeklyWorkoutGoal: parsed.settings?.weeklyWorkoutGoal ?? base.settings.weeklyWorkoutGoal,
+              calorieGoal: parsed.settings?.calorieGoal ?? base.settings.calorieGoal,
+              proteinGoal: parsed.settings?.proteinGoal ?? base.settings.proteinGoal,
+              calorieMarginPct: parsed.settings?.calorieMarginPct ?? base.settings.calorieMarginPct,
+              proteinMarginPct: parsed.settings?.proteinMarginPct ?? base.settings.proteinMarginPct,
+              goalDirections: { ...base.settings.goalDirections, ...(parsed.settings?.goalDirections || {}) },
+            },
+          };
+          saveState();
+          renderAll();
+          closeSettings();
+          showToast('تم استيراد البيانات بنجاح.');
+        });
       } catch (err) {
-        alert('تعذّر قراءة الملف. تأكد أنه ملف JSON صحيح تم تصديره من هذا التطبيق.');
+        showToast('تعذّر قراءة الملف. تأكد أنه ملف JSON صحيح تم تصديره من هذا التطبيق.');
       }
     };
     reader.readAsText(file);
