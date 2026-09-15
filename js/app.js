@@ -623,16 +623,25 @@
   function computeWeeklyStreak() {
     let streak = 0;
     let cursor = weekStart(new Date());
+    const today = todayStr();
     for (let i = 0; i < 52; i++) {
       const we = new Date(cursor);
       we.setDate(we.getDate() + 6);
+      const weekEnded = toDateStr(we) < today;
       const datesInWeek = Object.keys(state.dailyLogs).filter(d => {
         const dd = new Date(d + 'T00:00:00');
         return dd >= cursor && dd <= we;
       });
       const doneCount = datesInWeek.filter(d => state.dailyLogs[d].workout?.done).length;
-      if (doneCount < state.settings.weeklyWorkoutGoal) break;
-      streak++;
+      if (doneCount >= state.settings.weeklyWorkoutGoal) {
+        streak++;
+      } else if (i === 0 && !weekEnded) {
+        // The current week is still in progress and hasn't hit the goal
+        // yet — that's not a broken streak, it just hasn't been earned
+        // (or lost) this week. Keep looking at completed weeks before it.
+      } else {
+        break;
+      }
       cursor = new Date(cursor);
       cursor.setDate(cursor.getDate() - 7);
     }
