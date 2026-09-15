@@ -539,7 +539,7 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 
 .modal-divider { border-top: 1px solid var(--border); margin: 16px 0 0; }
 
-/* ---------- assistant tab ---------- */
+/* ---------- per-tab AI tips ---------- */
 
 .assistant-output {
   white-space: pre-wrap;
@@ -550,42 +550,6 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 }
 .assistant-output:empty { margin-top: 0; }
 .assistant-output .thinking { color: var(--muted); }
-
-.chat-messages {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 420px;
-  overflow-y: auto;
-  margin-bottom: 12px;
-}
-.chat-messages:empty { display: none; }
-
-.chat-bubble {
-  max-width: 85%;
-  padding: 10px 14px;
-  border-radius: 14px;
-  font-size: 0.9rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-.chat-bubble.user {
-  align-self: flex-start;
-  background: var(--accent);
-  color: #fff;
-  border-bottom-right-radius: 4px;
-}
-.chat-bubble.assistant {
-  align-self: flex-end;
-  background: var(--surface-2);
-  color: var(--ink);
-  border: 1px solid var(--border);
-  border-bottom-left-radius: 4px;
-}
-.chat-bubble.assistant.thinking { color: var(--muted); }
-
-.chat-input-row { display: flex; gap: 8px; }
-.chat-input-row input { flex: 1; }
 
 .toast {
   position: fixed;

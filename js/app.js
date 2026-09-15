@@ -1072,7 +1072,7 @@
   /* ============================ AI ASSISTANT ============================ */
 
   let sampleCap = null;
-  let chatTurns = []; // { role: 'user' | 'assistant', content: string }
+  const TIPS_BUTTON_IDS = ['tipsTodayBtn', 'tipsMeasureBtn', 'tipsHistoryBtn'];
 
   const ASSISTANT_RULES =
     'أنت مساعد صحي ولياقة بدنية شخصي داخل تطبيق متابعة يستخدمه شخص واحد. ' +
@@ -1133,10 +1133,10 @@
   }
 
   function updateAssistantAvailability(available) {
-    document.getElementById('insightsBtn').disabled = !available;
-    document.getElementById('assistantAskBtn').disabled = !available;
-    document.getElementById('assistantQuestion').disabled = !available;
-    document.getElementById('assistantUnavailable').classList.toggle('hidden', available);
+    TIPS_BUTTON_IDS.forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.disabled = !available;
+    });
   }
 
   async function initAssistant() {
@@ -1152,82 +1152,52 @@
     updateAssistantAvailability(!!s);
   }
 
-  document.getElementById('insightsBtn').addEventListener('click', async () => {
-    if (!sampleCap) { showToast('المساعد الذكي غير متاح في هذا العرض.'); return; }
-    const btn = document.getElementById('insightsBtn');
-    const out = document.getElementById('insightsOutput');
-    btn.disabled = true;
-    out.innerHTML = '<span class="thinking">🤔 يفكر...</span>';
-    try {
-      const context = buildAssistantContext();
-      const prompt =
-        ASSISTANT_RULES +
-        '\n\nاكتب 3 إلى 5 ملاحظات أو نصائح قصيرة (سطر أو سطرين لكل واحدة) بناءً على البيانات التالية. ' +
-        'ركّز على: الالتزام بهدف أيام التمرين الأسبوعية، اتساق السعرات والبروتين مقابل الهدف، وأي اتجاه ملحوظ بالقياسات. ' +
-        'اجعل كل نصيحة تبدأ برمز تعبيري مناسب، سطر مستقل لكل نصيحة، بدون مقدمة أو خاتمة.' +
-        '\n\nبيانات المستخدم:\n' + JSON.stringify(context);
-      const { text } = await sampleCap(prompt, {
-        modelTier: 'quick',
-        onText: ({ text }) => { out.textContent = text; },
-      });
-      out.textContent = text;
-    } catch (err) {
-      out.textContent = assistantErrorMessage(err);
-    } finally {
-      btn.disabled = !sampleCap;
-    }
-  });
+  // One "professional tips" block per tab, all reading the FULL data (not
+  // just that tab's), each focused on what that tab is about.
+  const TIPS_SECTIONS = [
+    {
+      btnId: 'tipsTodayBtn',
+      outId: 'tipsTodayOutput',
+      focus: 'ركّزي في نصيحتك على: مدى انتظام تسجيله اليومي، واتساق التمرين والسعرات والبروتين مقابل الهدف خلال آخر الأيام المسجّلة، وأي ملاحظة تتعلق بمرحلة الدورة الحالية إن وُجدت.',
+    },
+    {
+      btnId: 'tipsMeasureBtn',
+      outId: 'tipsMeasureOutput',
+      focus: 'ركّزي في نصيحتك على: اتجاه التغيّر في قياسات الجسم عبر الوقت (تحسّن أو تراجع) مقارنة بهدف كل قياس، وأي قياس يستحق انتباهًا أكبر.',
+    },
+    {
+      btnId: 'tipsHistoryBtn',
+      outId: 'tipsHistoryOutput',
+      focus: 'لخّصي أداءه العام على المدى الأطول: الانتظام بالتسجيل، ونمط الالتزام بالتمرين والسعرات والبروتين عبر الأسابيع، وأي اتجاه عام يستحق الانتباه.',
+    },
+  ];
 
-  function appendChatBubble(role, text, thinking) {
-    const wrap = document.getElementById('chatMessages');
-    const bubble = document.createElement('div');
-    bubble.className = 'chat-bubble ' + role + (thinking ? ' thinking' : '');
-    bubble.textContent = text;
-    wrap.appendChild(bubble);
-    wrap.scrollTop = wrap.scrollHeight;
-    return bubble;
-  }
-
-  async function sendAssistantQuestion() {
-    if (!sampleCap) { showToast('المساعد الذكي غير متاح في هذا العرض.'); return; }
-    const input = document.getElementById('assistantQuestion');
-    const question = input.value.trim();
-    if (!question) return;
-
-    appendChatBubble('user', question);
-    input.value = '';
-    const askBtn = document.getElementById('assistantAskBtn');
-    askBtn.disabled = true;
-    const replyBubble = appendChatBubble('assistant', '🤔 يفكر...', true);
-
-    const context = buildAssistantContext();
-    const instructions = ASSISTANT_RULES + '\n\nبيانات المستخدم:\n' + JSON.stringify(context);
-    const turnsToSend = [{ role: 'user', content: instructions }, ...chatTurns, { role: 'user', content: question }];
-
-    try {
-      const { text } = await sampleCap(turnsToSend, {
-        cache: false,
-        modelTier: 'quick',
-        onText: ({ text }) => {
-          replyBubble.classList.remove('thinking');
-          replyBubble.textContent = text;
-        },
-      });
-      replyBubble.classList.remove('thinking');
-      replyBubble.textContent = text;
-      chatTurns.push({ role: 'user', content: question }, { role: 'assistant', content: text });
-      if (chatTurns.length > 12) chatTurns = chatTurns.slice(-12);
-    } catch (err) {
-      replyBubble.classList.remove('thinking');
-      replyBubble.textContent = assistantErrorMessage(err) || '⚠️ تم الإلغاء.';
-    } finally {
-      askBtn.disabled = !sampleCap;
-    }
-  }
-
-  document.getElementById('assistantAskBtn').addEventListener('click', sendAssistantQuestion);
-  document.getElementById('assistantQuestion').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); sendAssistantQuestion(); }
+  TIPS_SECTIONS.forEach(({ btnId, outId, focus }) => {
+    const btn = document.getElementById(btnId);
+    const out = document.getElementById(outId);
+    if (!btn || !out) return;
+    btn.addEventListener('click', async () => {
+      if (!sampleCap) { showToast('المساعد الذكي غير متاح في هذا العرض.'); return; }
+      btn.disabled = true;
+      out.innerHTML = '<span class="thinking">🤔 يفكر...</span>';
+      try {
+        const context = buildAssistantContext();
+        const prompt =
+          ASSISTANT_RULES +
+          '\n\n' + focus +
+          ' اكتبي 3 إلى 4 نصائح عملية قصيرة (سطر أو سطرين لكل واحدة)، كل نصيحة تبدأ برمز تعبيري مناسب، سطر مستقل لكل نصيحة، بدون مقدمة أو خاتمة.' +
+          '\n\nبيانات المستخدم:\n' + JSON.stringify(context);
+        const { text } = await sampleCap(prompt, {
+          modelTier: 'default',
+          onText: ({ text }) => { out.textContent = text; },
+        });
+        out.textContent = text;
+      } catch (err) {
+        out.textContent = assistantErrorMessage(err);
+      } finally {
+        btn.disabled = !sampleCap;
+      }
+    });
   });
 
   /* ============================ RENDER ALL ============================ */

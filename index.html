@@ -16,7 +16,6 @@
   <button class="tab-btn active" data-tab="today">📅 اليوم</button>
   <button class="tab-btn" data-tab="measurements">📏 القياسات</button>
   <button class="tab-btn" data-tab="history">🗂️ السجل</button>
-  <button class="tab-btn" data-tab="assistant">✨ المساعد</button>
 </nav>
 
 <main>
@@ -111,6 +110,13 @@
           <tbody></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>🧠 نصائح احترافية</h2>
+      <p class="muted">تحليل مبني على كل بياناتك: انتظامك بالتسجيل، والتزامك بالتمرين والسعرات والبروتين.</p>
+      <button type="button" id="tipsTodayBtn" class="btn-primary">✨ احصل على نصائح</button>
+      <div id="tipsTodayOutput" class="assistant-output"></div>
     </div>
   </section>
 
@@ -215,6 +221,13 @@
         </table>
       </div>
     </div>
+
+    <div class="card">
+      <h2>🧠 نصائح احترافية</h2>
+      <p class="muted">تحليل مبني على كل قياساتك: اتجاه التغيّر عبر الوقت مقارنة بأهدافك.</p>
+      <button type="button" id="tipsMeasureBtn" class="btn-primary">✨ احصل على نصائح</button>
+      <div id="tipsMeasureOutput" class="assistant-output"></div>
+    </div>
   </section>
 
   <!-- ===================== HISTORY TAB ===================== -->
@@ -238,28 +251,15 @@
         </table>
       </div>
     </div>
-  </section>
-
-  <!-- ===================== ASSISTANT TAB ===================== -->
-  <section id="tab-assistant" class="tab-panel">
-    <div class="card">
-      <h2>🧠 نصائح ذكية</h2>
-      <p class="muted">تحليل سريع لآخر ١٤ يومًا من سجلك وأحدث قياساتك، مبني فقط على أرقامك الفعلية.</p>
-      <button type="button" id="insightsBtn" class="btn-primary">✨ حلّل بياناتي</button>
-      <div id="insightsOutput" class="assistant-output"></div>
-    </div>
 
     <div class="card">
-      <h2>💬 اسأل عن بياناتك</h2>
-      <p class="muted">اسأل أي سؤال عن سجلك — مثل تقدّمك الأسبوعي أو التزامك بأهدافك — والمساعد يجاوبك بالاعتماد على بياناتك المسجّلة فقط.</p>
-      <div id="chatMessages" class="chat-messages"></div>
-      <div class="chat-input-row">
-        <input type="text" id="assistantQuestion" placeholder="مثال: كيف كان التزامي بالتمرين هذا الأسبوع؟">
-        <button type="button" id="assistantAskBtn" class="btn-primary">إرسال</button>
-      </div>
-      <p id="assistantUnavailable" class="muted hidden">⚠️ المساعد الذكي غير متاح في هذا العرض حاليًا.</p>
+      <h2>🧠 نصائح احترافية</h2>
+      <p class="muted">تحليل مبني على كل سجلك: نمط الالتزام والانتظام على المدى الأطول.</p>
+      <button type="button" id="tipsHistoryBtn" class="btn-primary">✨ احصل على نصائح</button>
+      <div id="tipsHistoryOutput" class="assistant-output"></div>
     </div>
   </section>
+
 </main>
 
 <!-- ===================== SETTINGS MODAL ===================== -->
