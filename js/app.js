@@ -717,6 +717,48 @@
     `;
   }
 
+  // Simple bar chart: one bar per (Arabic) week that overlaps the current
+  // calendar month, showing how many workout days were logged that week.
+  function renderMonthlyProgressChart() {
+    const el = document.getElementById('monthlyProgressChart');
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const goal = state.settings.weeklyWorkoutGoal || 4;
+    const todayWeekStart = toDateStr(weekStart(now));
+
+    const weeks = [];
+    let cursor = weekStart(monthStart);
+    while (cursor <= monthEnd) {
+      const we = new Date(cursor);
+      we.setDate(we.getDate() + 6);
+      const datesInWeek = Object.keys(state.dailyLogs).filter(d => {
+        const dd = new Date(d + 'T00:00:00');
+        return dd >= cursor && dd <= we && dd >= monthStart && dd <= monthEnd;
+      });
+      const workoutDays = datesInWeek.filter(d => state.dailyLogs[d].workout?.done).length;
+      weeks.push({ start: toDateStr(cursor), workoutDays });
+      cursor = new Date(cursor);
+      cursor.setDate(cursor.getDate() + 7);
+    }
+
+    const maxVal = Math.max(goal, ...weeks.map(w => w.workoutDays), 1);
+    el.innerHTML = weeks.map((w, i) => {
+      const pct = Math.round((w.workoutDays / maxVal) * 100);
+      const isCurrent = w.start === todayWeekStart;
+      const fillCls = w.workoutDays === 0 ? 'bar-empty' : (isCurrent ? 'bar-current' : '');
+      return `
+        <div class="month-bar-col">
+          <div class="month-bar-value">${w.workoutDays}</div>
+          <div class="month-bar-track">
+            <div class="month-bar-fill ${fillCls}" style="height:${Math.max(pct, w.workoutDays ? 6 : 2)}%"></div>
+          </div>
+          <div class="month-bar-label">أسبوع ${i + 1}</div>
+        </div>
+      `;
+    }).join('') || '<p class="muted">لا توجد بيانات لهذا الشهر بعد</p>';
+  }
+
   function calorieCellHtml(value) {
     if (value === null || value === undefined) return '—';
     const status = computeGoalStatus(value, state.settings.calorieGoal, state.settings.calorieMarginPct);
@@ -1411,6 +1453,7 @@
     loadDailyFormForDate();
     renderCycleCard();
     renderWeeklyProgress();
+    renderMonthlyProgressChart();
     renderRecentDailyTable();
     renderFullDailyTable();
     renderMeasureTable();
