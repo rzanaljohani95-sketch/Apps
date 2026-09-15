@@ -31,34 +31,86 @@
     };
   }
 
-  function loadState() {
+  function normalizeState(parsed) {
+    const base = defaultState();
+    if (!parsed) return base;
+    return {
+      dailyLogs: parsed.dailyLogs || base.dailyLogs,
+      measurements: parsed.measurements || base.measurements,
+      settings: {
+        weeklyWorkoutGoal: parsed.settings?.weeklyWorkoutGoal ?? base.settings.weeklyWorkoutGoal,
+        calorieGoal: parsed.settings?.calorieGoal ?? base.settings.calorieGoal,
+        proteinGoal: parsed.settings?.proteinGoal ?? base.settings.proteinGoal,
+        calorieMarginPct: parsed.settings?.calorieMarginPct ?? base.settings.calorieMarginPct,
+        proteinMarginPct: parsed.settings?.proteinMarginPct ?? base.settings.proteinMarginPct,
+        goalDirections: { ...base.settings.goalDirections, ...(parsed.settings?.goalDirections || {}) },
+      },
+    };
+  }
+
+  function loadLocalState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      const base = defaultState();
-      return {
-        dailyLogs: parsed.dailyLogs || base.dailyLogs,
-        measurements: parsed.measurements || base.measurements,
-        settings: {
-          weeklyWorkoutGoal: parsed.settings?.weeklyWorkoutGoal ?? base.settings.weeklyWorkoutGoal,
-          calorieGoal: parsed.settings?.calorieGoal ?? base.settings.calorieGoal,
-          proteinGoal: parsed.settings?.proteinGoal ?? base.settings.proteinGoal,
-          calorieMarginPct: parsed.settings?.calorieMarginPct ?? base.settings.calorieMarginPct,
-          proteinMarginPct: parsed.settings?.proteinMarginPct ?? base.settings.proteinMarginPct,
-          goalDirections: { ...base.settings.goalDirections, ...(parsed.settings?.goalDirections || {}) },
-        },
-      };
+      if (!raw) return null;
+      return normalizeState(JSON.parse(raw));
     } catch (e) {
-      console.error('Failed to load data, starting fresh.', e);
-      return defaultState();
+      console.error('Failed to read local data.', e);
+      return null;
     }
   }
 
-  let state = loadState();
+  // Browser localStorage alone is not reliable everywhere this page can run
+  // (private windows, mobile app webviews that clear site data between
+  // sessions, ...). When the page runs inside an Artifact viewer with the
+  // `db` capability granted, mirror every write to durable cloud storage
+  // and treat it as the source of truth; outside that context (e.g. a
+  // plain static hosting of this file) localStorage alone still works.
+  let state = loadLocalState() || defaultState();
+  let dbCap = null;
+  let syncStatus = 'local'; // 'local' | 'checking' | 'cloud'
 
   function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.error('Failed to write local data.', e);
+    }
+    if (dbCap) {
+      dbCap.doc('app/state').set(state).catch(e => console.error('Cloud save failed.', e));
+    }
+  }
+
+  async function initCloudSync() {
+    if (typeof window.claude === 'undefined' || typeof window.claude.use !== 'function') return;
+    syncStatus = 'checking';
+    let db;
+    try {
+      db = await window.claude.use('db');
+    } catch (e) {
+      db = null;
+    }
+    if (!db) return;
+    dbCap = db;
+
+    try {
+      const snap = await db.doc('app/state').get();
+      if (snap.exists) {
+        state = normalizeState(snap.data());
+      } else {
+        await db.doc('app/state').set(state);
+      }
+      syncStatus = 'cloud';
+      renderAll();
+      showToast('☁️ الحفظ السحابي مفعّل — بياناتك محفوظة بأمان');
+    } catch (e) {
+      console.error('Cloud load failed, staying on local data.', e);
+    }
+
+    db.doc('app/state').onSnapshot(snap => {
+      if (!snap.exists || snap.metadata.hasPendingWrites) return;
+      state = normalizeState(snap.data());
+      renderAll();
+    }, e => console.error('Cloud sync error.', e));
   }
 
   /* ============================ HELPERS ============================ */
@@ -596,6 +648,18 @@
   document.getElementById('closeSettings').addEventListener('click', closeSettings);
 
   function openSettings() {
+    const syncEl = document.getElementById('syncStatusLine');
+    if (syncStatus === 'cloud') {
+      syncEl.textContent = '☁️ الحفظ السحابي مفعّل — بياناتك محفوظة بأمان ولا تُفقد.';
+      syncEl.className = 'sync-status sync-ok';
+    } else if (syncStatus === 'checking') {
+      syncEl.textContent = '⏳ يتم التحقق من الحفظ السحابي...';
+      syncEl.className = 'sync-status';
+    } else {
+      syncEl.textContent = '💾 يُحفظ محليًا في هذا المتصفح فقط (الحفظ السحابي غير متاح هنا).';
+      syncEl.className = 'sync-status sync-local';
+    }
+
     document.getElementById('weeklyGoalInput').value = state.settings.weeklyWorkoutGoal;
     document.getElementById('calorieGoalInput').value = state.settings.calorieGoal;
     document.getElementById('calorieMarginInput').value = state.settings.calorieMarginPct;
@@ -686,4 +750,5 @@
   }
 
   renderAll();
+  initCloudSync();
 })();

@@ -412,6 +412,17 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 
 #confirmMessage { margin: 0 0 4px; font-size: 0.95rem; }
 
+.sync-status {
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.sync-status.sync-ok { background: var(--accent-soft); color: var(--accent-dark); }
+.sync-status.sync-local { background: var(--warn-soft); color: var(--warn); }
+
 .toast {
   position: fixed;
   bottom: 24px;
