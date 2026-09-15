@@ -165,12 +165,11 @@
     return d.toLocaleDateString('ar-u-ca-gregory', { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
-  // Arabic week: Saturday -> Friday
+  // Week: Sunday -> Saturday
   function weekStart(date) {
     const d = new Date(date);
     const day = d.getDay(); // 0 = Sunday ... 6 = Saturday
-    const diff = (day + 1) % 7; // days since Saturday
-    d.setDate(d.getDate() - diff);
+    d.setDate(d.getDate() - day);
     d.setHours(0, 0, 0, 0);
     return d;
   }
@@ -522,7 +521,7 @@
     }
   }
 
-  const AR_DAY_NAMES = ['سبت', 'أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
+  const AR_DAY_NAMES = ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
 
   function renderWeekCalendar() {
     const container = document.getElementById('weekCalendar');
@@ -750,7 +749,7 @@
   // Month calendar grid with workout days circled — the same idea as the
   // "streak calendar" screens common in fitness apps, in the app's own
   // warm palette instead of a line chart. Each displayed row is also a
-  // full Saturday-Friday week, so a row that hit the weekly workout goal
+  // full Sunday-Saturday week, so a row that hit the weekly workout goal
   // gets a highlighted band + flame — a weekly streak marker laid over
   // the monthly view.
   function renderMonthlyProgressChart() {
@@ -758,7 +757,7 @@
     const now = new Date();
     const year = now.getFullYear(), month = now.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstWeekday = (new Date(year, month, 1).getDay() + 1) % 7; // 0 = Saturday
+    const firstWeekday = new Date(year, month, 1).getDay(); // 0 = Sunday
     const today = todayStr();
     const goal = state.settings.weeklyWorkoutGoal || 4;
     const streak = computeWeeklyStreak();
