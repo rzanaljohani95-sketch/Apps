@@ -761,6 +761,7 @@
     const firstWeekday = (new Date(year, month, 1).getDay() + 1) % 7; // 0 = Saturday
     const today = todayStr();
     const goal = state.settings.weeklyWorkoutGoal || 4;
+    const streak = computeWeeklyStreak();
 
     const header = AR_DAY_NAMES.map(n => `<div class="month-cal-dow">${n.slice(0, 2)}</div>`).join('');
 
@@ -773,7 +774,7 @@
     for (let r = 0; r < flat.length; r += 7) {
       const rowDays = flat.slice(r, r + 7);
       const workoutDays = rowDays.filter(d => d && state.dailyLogs[toDateStr(new Date(year, month, d))]?.workout?.done).length;
-      const weekStreak = rowDays.some(d => d !== null) && workoutDays >= goal;
+      const rowGoalMet = rowDays.some(d => d !== null) && workoutDays >= goal;
       const cells = rowDays.map(d => {
         if (d === null) return '<div class="month-cal-cell empty"></div>';
         const ds = toDateStr(new Date(year, month, d));
@@ -785,13 +786,22 @@
       }).join('');
       rows += `
         <div class="month-cal-row-wrap">
-          <span class="month-cal-row-flame">${weekStreak ? '🔥' : ''}</span>
-          <div class="month-cal-row${weekStreak ? ' week-streak' : ''}">${cells}</div>
+          <span class="month-cal-row-flame">${rowGoalMet ? '🔥' : ''}</span>
+          <div class="month-cal-row${rowGoalMet ? ' week-streak' : ''}">${cells}</div>
         </div>
       `;
     }
 
+    // Spell out what the flame rows actually mean — they're not just
+    // "a good week", they're the same consecutive-week streak shown in
+    // the card above, so say the count here too instead of leaving the
+    // reader to infer it from the highlighted bands alone.
+    const streakNote = streak > 0
+      ? `🔥 سلسلة ${arWeeksLabel(streak)} متتالية ملتزمة بهدف التمرين الأسبوعي — الأسابيع المميزة بالأسفل هي أسابيع سلسلتك`
+      : 'أكملي هدفك الأسبوعي لتبدأ سلسلة أسابيع هنا 🔥';
+
     el.innerHTML = `
+      <div class="month-cal-streak-note">${streakNote}</div>
       <div class="month-cal-row-wrap month-cal-header-wrap">
         <span class="month-cal-row-flame"></span>
         <div class="month-cal-row month-cal-dow-row">${header}</div>

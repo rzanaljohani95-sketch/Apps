@@ -359,6 +359,16 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .month-cal-row-wrap + .month-cal-row-wrap { margin-top: 3px; }
 .month-cal-header-wrap { margin-bottom: 2px; }
 
+.month-cal-streak-note {
+  max-width: 236px;
+  margin: 0 auto 8px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent-dark);
+  line-height: 1.4;
+}
+
 .month-cal-row-flame {
   flex-shrink: 0;
   width: 14px;
