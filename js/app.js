@@ -190,12 +190,12 @@
   }
 
   let toastTimer = null;
-  function showToast(message) {
+  function showToast(message, durationMs) {
     const toast = document.getElementById('toast');
     toast.textContent = message;
     toast.classList.remove('hidden');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.add('hidden'), 2800);
+    toastTimer = setTimeout(() => toast.classList.add('hidden'), durationMs || 2800);
   }
 
   /* ---------- daily goal status (calories / protein) ---------- */
@@ -239,7 +239,6 @@
 
   /* ============================ DAILY FORM ============================ */
 
-  const dailyForm = document.getElementById('dailyForm');
   const dailyDateInput = document.getElementById('dailyDate');
   const workoutDoneInput = document.getElementById('workoutDone');
   const workoutDetails = document.getElementById('workoutDetails');
@@ -281,25 +280,29 @@
     updateDailyGoalBadges();
   }
 
-  dailyForm.addEventListener('submit', e => {
-    e.preventDefault();
-    const date = dailyDateInput.value;
-    if (!date) { showToast('اختر التاريخ أولًا.'); return; }
+  document.getElementById('dailySaveBtn').addEventListener('click', () => {
+    try {
+      const date = dailyDateInput.value;
+      if (!date) { showToast('اختر التاريخ أولًا.'); return; }
 
-    state.dailyLogs[date] = {
-      steps: numOrNull(document.getElementById('steps').value),
-      calories: numOrNull(document.getElementById('calories').value),
-      protein: numOrNull(document.getElementById('protein').value),
-      workout: {
-        done: workoutDoneInput.checked,
-        type: document.getElementById('workoutType').value.trim(),
-        duration: numOrNull(document.getElementById('workoutDuration').value),
-        notes: document.getElementById('workoutNotes').value.trim(),
-      },
-    };
-    saveState();
-    renderAll();
-    showToast('تم حفظ يوم ' + formatDateAr(date) + '.');
+      state.dailyLogs[date] = {
+        steps: numOrNull(document.getElementById('steps').value),
+        calories: numOrNull(document.getElementById('calories').value),
+        protein: numOrNull(document.getElementById('protein').value),
+        workout: {
+          done: workoutDoneInput.checked,
+          type: document.getElementById('workoutType').value.trim(),
+          duration: numOrNull(document.getElementById('workoutDuration').value),
+          notes: document.getElementById('workoutNotes').value.trim(),
+        },
+      };
+      saveState();
+      renderAll();
+      showToast('تم حفظ يوم ' + formatDateAr(date) + '.');
+    } catch (err) {
+      console.error('Daily save failed:', err);
+      showToast('⚠️ فشل الحفظ: ' + (err && err.message ? err.message : String(err)), 8000);
+    }
   });
 
   function numOrNull(v) {
@@ -424,21 +427,26 @@
 
   document.getElementById('measureDate').value = todayStr();
 
-  document.getElementById('measureForm').addEventListener('submit', e => {
-    e.preventDefault();
-    const date = document.getElementById('measureDate').value;
-    if (!date) { showToast('اختر تاريخ القياس أولًا.'); return; }
-    const entry = { id: `${date}-${Date.now()}`, date };
-    MEASURE_FIELDS.forEach(f => {
-      entry[f.key] = numOrNull(document.getElementById(`m_${f.key}`).value);
-    });
-    state.measurements.push(entry);
-    state.measurements.sort((a, b) => a.date.localeCompare(b.date));
-    saveState();
-    e.target.reset();
-    document.getElementById('measureDate').value = todayStr();
-    renderAll();
-    showToast('تم حفظ القياسات.');
+  document.getElementById('measureSaveBtn').addEventListener('click', () => {
+    try {
+      const date = document.getElementById('measureDate').value;
+      if (!date) { showToast('اختر تاريخ القياس أولًا.'); return; }
+      const entry = { id: `${date}-${Date.now()}`, date };
+      MEASURE_FIELDS.forEach(f => {
+        const input = document.getElementById(`m_${f.key}`);
+        entry[f.key] = input ? numOrNull(input.value) : null;
+        if (input) input.value = '';
+      });
+      state.measurements.push(entry);
+      state.measurements.sort((a, b) => a.date.localeCompare(b.date));
+      saveState();
+      document.getElementById('measureDate').value = todayStr();
+      renderAll();
+      showToast('تم حفظ القياسات.');
+    } catch (err) {
+      console.error('Measurement save failed:', err);
+      showToast('⚠️ فشل الحفظ: ' + (err && err.message ? err.message : String(err)), 8000);
+    }
   });
 
   function deleteMeasurement(id) {

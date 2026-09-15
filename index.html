@@ -24,10 +24,10 @@
 
     <div class="card">
       <h2>تسجيل اليوم</h2>
-      <form id="dailyForm">
+      <div id="dailyForm">
         <div class="field">
           <label for="dailyDate">التاريخ</label>
-          <input type="date" id="dailyDate" required>
+          <input type="date" id="dailyDate">
         </div>
 
         <div class="grid-3">
@@ -69,8 +69,8 @@
           </div>
         </div>
 
-        <button type="submit" class="btn-primary">حفظ اليوم</button>
-      </form>
+        <button type="button" id="dailySaveBtn" class="btn-primary">حفظ اليوم</button>
+      </div>
     </div>
 
     <div class="card">
@@ -104,14 +104,14 @@
 
     <div class="card">
       <h2>تسجيل قياسات الجسم</h2>
-      <form id="measureForm">
+      <div id="measureForm">
         <div class="field">
           <label for="measureDate">تاريخ القياس</label>
-          <input type="date" id="measureDate" required>
+          <input type="date" id="measureDate">
         </div>
         <div class="grid-4" id="measureFields"></div>
-        <button type="submit" class="btn-primary">حفظ القياسات</button>
-      </form>
+        <button type="button" id="measureSaveBtn" class="btn-primary">حفظ القياسات</button>
+      </div>
     </div>
 
     <div class="card">
