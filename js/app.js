@@ -502,7 +502,6 @@
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-      if (btn.dataset.tab === 'measurements') renderChart();
     });
   });
 
@@ -1165,150 +1164,74 @@
     }).join('');
   }
 
-  /* ---------- chart ---------- */
+  /* ---------- measurements overview (all fields at a glance) ---------- */
 
-  const chartMetricSelect = document.getElementById('chartMetric');
-  chartMetricSelect.innerHTML = MEASURE_FIELDS.map(f => `<option value="${f.key}">${f.label}</option>`).join('');
-  chartMetricSelect.addEventListener('change', renderChart);
-
-  function cssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  // A minimal sparkline path for one field's whole history, scaled to its
+  // own min/max — not meant to carry an axis, just the shape of the trend.
+  function buildSparklinePath(values, w, h, pad) {
+    let min = Math.min(...values), max = Math.max(...values);
+    if (min === max) { min -= 1; max += 1; }
+    const stepX = (w - pad * 2) / (values.length - 1);
+    const yFor = v => pad + (h - pad * 2) - ((v - min) / (max - min)) * (h - pad * 2);
+    return values.map((v, i) => `${i === 0 ? 'M' : 'L'}${(pad + i * stepX).toFixed(1)},${yFor(v).toFixed(1)}`).join(' ');
   }
 
-  function hexToRgba(hex, alpha) {
-    const h = hex.replace('#', '');
-    const bigint = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
-    const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-
-  function renderChart() {
-    const canvas = document.getElementById('progressChart');
-    const ctx = canvas.getContext('2d');
+  function renderMeasureOverview() {
+    const el = document.getElementById('measureOverviewGrid');
     const emptyMsg = document.getElementById('chartEmptyMsg');
-    const metric = chartMetricSelect.value || MEASURE_FIELDS[0].key;
-    const field = MEASURE_FIELDS.find(f => f.key === metric);
-
-    const points = state.measurements
-      .filter(m => m[metric] !== null && m[metric] !== undefined)
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (points.length < 2) {
+    if (state.measurements.length === 0) {
+      el.innerHTML = '';
       emptyMsg.classList.remove('hidden');
       return;
     }
     emptyMsg.classList.add('hidden');
 
-    const colorBorder = cssVar('--border') || '#e6e0d2';
-    const colorMuted = cssVar('--muted') || '#837c6c';
-    const colorInk = cssVar('--ink') || '#2c2a24';
-    const colorAccent = cssVar('--accent') || '#8a9a52';
-    const colorWarn = cssVar('--warn') || '#c97a3d';
+    const sorted = [...state.measurements].sort((a, b) => a.date.localeCompare(b.date));
 
-    const W = canvas.width, H = canvas.height;
-    const padL = 52, padR = 20, padT = 24, padB = 40;
-    const plotW = W - padL - padR;
-    const plotH = H - padT - padB;
+    el.innerHTML = MEASURE_FIELDS.map(f => {
+      const points = sorted.filter(m => m[f.key] !== null && m[f.key] !== undefined);
+      if (points.length === 0) {
+        return `
+          <div class="mo-card">
+            <div class="mo-header"><span class="mo-label">${f.label}</span></div>
+            <p class="muted mo-empty">لا يوجد قياس بعد</p>
+          </div>
+        `;
+      }
 
-    const values = points.map(p => p[metric]);
-    let min = Math.min(...values), max = Math.max(...values);
-    if (min === max) { min -= 1; max += 1; }
-    const pad = (max - min) * 0.2;
-    min -= pad; max += pad;
-
-    const xFor = i => padL + (points.length === 1 ? plotW / 2 : (plotW * i) / (points.length - 1));
-    const yFor = v => padT + plotH - ((v - min) / (max - min)) * plotH;
-
-    // faint grid + axis values
-    ctx.strokeStyle = colorBorder;
-    ctx.lineWidth = 1;
-    ctx.font = '11px "IBM Plex Sans Arabic", sans-serif';
-    ctx.fillStyle = colorMuted;
-    const gridLines = 4;
-    for (let i = 0; i <= gridLines; i++) {
-      const y = padT + (plotH * i) / gridLines;
-      ctx.beginPath();
-      ctx.moveTo(padL, y);
-      ctx.lineTo(W - padR, y);
-      ctx.stroke();
-      const val = max - ((max - min) * i) / gridLines;
-      ctx.textAlign = 'left';
-      ctx.fillText(round1(val).toString(), 6, y + 4);
-    }
-
-    // area fill under the line
-    ctx.beginPath();
-    ctx.moveTo(xFor(0), yFor(points[0][metric]));
-    points.forEach((p, i) => ctx.lineTo(xFor(i), yFor(p[metric])));
-    ctx.lineTo(xFor(points.length - 1), padT + plotH);
-    ctx.lineTo(xFor(0), padT + plotH);
-    ctx.closePath();
-    ctx.fillStyle = hexToRgba(colorAccent, 0.12);
-    ctx.fill();
-
-    // segments coloured by whether the change matches the user's goal
-    points.forEach((p, i) => {
-      if (i === 0) return;
-      const prevVal = points[i - 1][metric];
-      const diff = p[metric] - prevVal;
-      const goal = state.settings.goalDirections[metric];
-      let color = colorMuted;
+      const values = points.map(p => p[f.key]);
+      const latest = values[values.length - 1];
+      const first = values[0];
+      const diff = round1(latest - first);
+      const goal = state.settings.goalDirections[f.key];
+      let deltaCls = 'flat';
       if (diff !== 0 && goal) {
         const improved = (goal === 'down' && diff < 0) || (goal === 'up' && diff > 0);
-        color = improved ? colorAccent : colorWarn;
+        deltaCls = improved ? 'good' : 'bad';
       }
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(xFor(i - 1), yFor(prevVal));
-      ctx.lineTo(xFor(i), yFor(p[metric]));
-      ctx.stroke();
-    });
+      const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '→';
 
-    // points + date labels
-    points.forEach((p, i) => {
-      const x = xFor(i), y = yFor(p[metric]);
-      const isLast = i === points.length - 1;
+      const sparkline = points.length >= 2
+        ? `<svg viewBox="0 0 100 32" class="mo-spark mo-spark-${deltaCls}" preserveAspectRatio="none">
+             <path d="${buildSparklinePath(values, 100, 32, 4)}"/>
+           </svg>`
+        : `<p class="muted mo-empty">قياس واحد فقط لحد الآن</p>`;
 
-      if (isLast) {
-        ctx.beginPath();
-        ctx.arc(x, y, 8, 0, Math.PI * 2);
-        ctx.fillStyle = hexToRgba(colorAccent, 0.18);
-        ctx.fill();
-      }
+      const deltaLine = points.length >= 2
+        ? `<div class="mo-delta ${deltaCls}">${arrow} ${diff > 0 ? '+' : ''}${diff} ${f.unit} منذ أول قياس</div>`
+        : '';
 
-      ctx.beginPath();
-      ctx.arc(x, y, isLast ? 5 : 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = isLast ? colorAccent : cssVar('--surface') || '#fff';
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = colorAccent;
-      ctx.stroke();
-
-      const showEvery = Math.ceil(points.length / 8);
-      if (i % showEvery === 0 || isLast) {
-        ctx.fillStyle = colorMuted;
-        ctx.textAlign = 'center';
-        const label = new Date(p.date + 'T00:00:00').toLocaleDateString('ar-u-ca-gregory', { month: 'numeric', day: 'numeric' });
-        ctx.fillText(label, x, H - padB + 18);
-      }
-    });
-
-    // last-value callout
-    ctx.fillStyle = colorInk;
-    ctx.font = 'bold 13px "IBM Plex Sans Arabic", sans-serif';
-    ctx.textAlign = 'right';
-    const last = points[points.length - 1][metric];
-    ctx.fillText(`${field.label}: ${round1(last)} ${field.unit}`, W - padR, 16);
-  }
-
-  if (window.matchMedia) {
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      if (document.getElementById('tab-measurements').classList.contains('active')) renderChart();
-    });
+      return `
+        <div class="mo-card">
+          <div class="mo-header">
+            <span class="mo-label">${f.label}</span>
+            <span class="mo-latest">${latest} ${f.unit}</span>
+          </div>
+          ${sparkline}
+          ${deltaLine}
+        </div>
+      `;
+    }).join('');
   }
 
   /* ============================ SETTINGS MODAL ============================ */
@@ -1558,7 +1481,7 @@
     renderFullDailyTable();
     renderMeasureTable();
     renderDeltaSummary();
-    renderChart();
+    renderMeasureOverview();
   }
 
   renderAll();
