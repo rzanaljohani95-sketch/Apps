@@ -747,58 +747,31 @@
   // Simple minimal line chart (one point per week overlapping the current
   // calendar month) showing workout days logged that week — a light
   // sparkline rather than a heavy bar grid.
+  // Month calendar grid with workout days circled — the same idea as the
+  // "streak calendar" screens common in fitness apps, in the app's own
+  // warm palette instead of a line chart.
   function renderMonthlyProgressChart() {
     const el = document.getElementById('monthlyProgressChart');
     const now = new Date();
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const goal = state.settings.weeklyWorkoutGoal || 4;
-    const todayDay = now.getDate();
+    const year = now.getFullYear(), month = now.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstWeekday = (new Date(year, month, 1).getDay() + 1) % 7; // 0 = Saturday
+    const today = todayStr();
 
-    // Always exactly 4 buckets ("a month = 4 weeks"), splitting the
-    // month's days evenly instead of following calendar week boundaries
-    // (which can add a stray 5th/6th partial week depending on the month).
-    const bucketSize = Math.ceil(daysInMonth / 4);
-    const weeks = [];
-    for (let b = 0; b < 4; b++) {
-      const dayFrom = b * bucketSize + 1;
-      const dayTo = Math.min(daysInMonth, dayFrom + bucketSize - 1);
-      if (dayFrom > daysInMonth) break;
-      let workoutDays = 0;
-      for (let d = dayFrom; d <= dayTo; d++) {
-        const ds = toDateStr(new Date(now.getFullYear(), now.getMonth(), d));
-        if (state.dailyLogs[ds]?.workout?.done) workoutDays++;
-      }
-      const isCurrent = todayDay >= dayFrom && todayDay <= dayTo;
-      weeks.push({ dayFrom, dayTo, workoutDays, isCurrent });
+    const header = AR_DAY_NAMES.map(n => `<div class="month-cal-dow">${n.slice(0, 2)}</div>`).join('');
+
+    let cells = '';
+    for (let i = 0; i < firstWeekday; i++) cells += '<div class="month-cal-cell empty"></div>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = toDateStr(new Date(year, month, d));
+      const done = !!state.dailyLogs[ds]?.workout?.done;
+      const cls = ['month-cal-cell'];
+      if (done) cls.push('done');
+      if (ds === today) cls.push('today');
+      cells += `<div class="${cls.join(' ')}"><span>${d}</span></div>`;
     }
 
-    const maxVal = Math.max(goal, ...weeks.map(w => w.workoutDays), 1);
-    const W = 300, H = 100, padX = 18, padTop = 22, padBottom = 22;
-    const n = weeks.length;
-    const stepX = n > 1 ? (W - padX * 2) / (n - 1) : 0;
-    const yFor = v => H - padBottom - (v / maxVal) * (H - padTop - padBottom);
-    const points = weeks.map((w, i) => ({ x: padX + i * stepX, y: yFor(w.workoutDays) }));
-
-    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-    const areaPath = `${linePath} L${points[n - 1].x.toFixed(1)},${(H - padBottom).toFixed(1)} L${points[0].x.toFixed(1)},${(H - padBottom).toFixed(1)} Z`;
-
-    const marks = points.map((p, i) => {
-      const isCurrent = weeks[i].isCurrent;
-      const valueLabel = isCurrent
-        ? `<text x="${p.x.toFixed(1)}" y="${(p.y - 12).toFixed(1)}" text-anchor="middle" class="month-line-value">${weeks[i].workoutDays}</text>`
-        : '';
-      return `${valueLabel}
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isCurrent ? 5 : 3}" class="month-line-dot${isCurrent ? ' current' : ''}"/>
-        <text x="${p.x.toFixed(1)}" y="${H - 4}" text-anchor="middle" class="month-line-week">أ${i + 1}</text>`;
-    }).join('');
-
-    el.innerHTML = `
-      <svg viewBox="0 0 ${W} ${H}" class="month-line-svg">
-        <path d="${areaPath}" class="month-line-area"/>
-        <path d="${linePath}" class="month-line-path"/>
-        ${marks}
-      </svg>
-    `;
+    el.innerHTML = `<div class="month-cal-grid">${header}${cells}</div>`;
   }
 
   function calorieCellHtml(value) {
