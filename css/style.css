@@ -770,6 +770,39 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .cycle-phase-icon { font-size: 1.2rem; line-height: 1.4; }
 .cycle-disclaimer { font-size: 0.72rem; margin: 8px 0 0; }
 
+.cycle-expect-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.cycle-expect-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cycle-expect-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.cycle-expect-icon { font-size: 1.05rem; line-height: 1.5; flex-shrink: 0; }
+
+.cycle-expect-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cycle-expect-label { font-size: 0.78rem; font-weight: 700; color: var(--ink); }
+.cycle-expect-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+
 /* ---------- measurement guide ---------- */
 
 details > summary {

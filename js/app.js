@@ -194,6 +194,40 @@
     ovulation: { icon: '🥚', label: 'الإباضة', tip: 'عادة ما تكون ذروة الطاقة والأداء البدني — وقت جيد للتمارين عالية الشدة إن رغبتِ.' },
     luteal: { icon: '🌗', label: 'المرحلة الأصفرية', tip: 'قد يزيد الشعور بالتعب أو الرغبة الغذائية قرب نهاية المرحلة — راقبي جسمك وعدّلي حسب حاجتك.' },
   };
+  // What to typically expect this phase, across four practical areas —
+  // general patterns, not medical advice, and every body differs.
+  const CYCLE_PHASE_EXPECT = {
+    menstrual: {
+      body: 'تقلصات وتعب عام محتمل، وانتفاخ خفيف قد يستمر من المرحلة السابقة.',
+      appetite: 'الشهية غالبًا طبيعية، وقد تزيد قليلًا في اليوم الأول أو الثاني.',
+      intensity: 'تحمّل شدة التمرين ينخفض — قلّلي الحمل حسب راحتك، ولا بأس بالراحة.',
+      sugar: 'الرغبة بالسكريات خفيفة إلى متوسطة عادة.',
+    },
+    follicular: {
+      body: 'الانتفاخ يخف بوضوح، والجسم يشعر بخفة ونشاط أكبر.',
+      appetite: 'الشهية معتدلة ومستقرة نسبيًا.',
+      intensity: 'تحمّل شدة التمرين يتحسن تدريجيًا — وقت مناسب لزيادة الأحمال أو الشدة.',
+      sugar: 'الرغبة بالسكريات منخفضة نسبيًا.',
+    },
+    ovulation: {
+      body: 'ذروة النشاط والحيوية، وقد يظهر انتفاخ بسيط جدًا حول يوم الإباضة نفسه.',
+      appetite: 'الشهية عادة في أدنى مستوياتها خلال الشهر.',
+      intensity: 'أعلى تحمّل لشدة التمرين — وقت جيد للتمارين عالية الكثافة إن رغبتِ.',
+      sugar: 'الرغبة بالسكريات منخفضة عادة.',
+    },
+    luteal: {
+      body: 'انتفاخ وحساسية بالثدي واردة، وزيادة طفيفة بالوزن قرب نهاية المرحلة بسبب احتباس الماء.',
+      appetite: 'الشهية ترتفع تدريجيًا، خصوصًا بالأسبوع الأخير قبل الدورة.',
+      intensity: 'تحمّل شدة التمرين يقل تدريجيًا — استمعي لجسمك وخففي إذا احتجتِ.',
+      sugar: 'الرغبة بالسكريات والكربوهيدرات ترتفع بشكل ملحوظ (من أعراض ما قبل الدورة الشائعة).',
+    },
+  };
+  const CYCLE_EXPECT_ROWS = [
+    { key: 'body', icon: '🧍‍♀️', label: 'تغيّر الجسم' },
+    { key: 'appetite', icon: '🍽️', label: 'الشهية' },
+    { key: 'intensity', icon: '💪', label: 'تحمّل شدة التمرين' },
+    { key: 'sugar', icon: '🍬', label: 'الرغبة بالسكريات' },
+  ];
   const BLOAT_PRONE_FIELDS = ['waist', 'lowerBelly', 'hips', 'weight'];
 
   function daysBetween(d1, d2) {
@@ -323,6 +357,16 @@
       return;
     }
     const phaseInfo = CYCLE_PHASES[info.phase];
+    const expect = CYCLE_PHASE_EXPECT[info.phase];
+    const expectRows = CYCLE_EXPECT_ROWS.map(r => `
+      <div class="cycle-expect-row">
+        <span class="cycle-expect-icon">${r.icon}</span>
+        <div class="cycle-expect-text">
+          <span class="cycle-expect-label">${r.label}</span>
+          <span class="cycle-expect-desc">${expect[r.key]}</span>
+        </div>
+      </div>
+    `).join('');
     const centerHeadline = info.daysUntilNextPeriod <= 0
       ? `متأخرة ${Math.abs(info.daysUntilNextPeriod)} يوم تقريبًا`
       : `${info.daysUntilNextPeriod} يوم حتى دورتك القادمة`;
@@ -356,7 +400,9 @@
         <span class="cycle-phase-icon">${phaseInfo.icon}</span>
         <span><strong>${phaseInfo.label}</strong> — ${phaseInfo.tip}</span>
       </div>
-      <p class="muted cycle-disclaimer">تقدير تقريبي بناءً على الأيام التي سجّلتِها، وليس بديلاً عن استشارة طبية.</p>
+      <div class="cycle-expect-title">👀 ايش المتوقع هذي المرحلة</div>
+      <div class="cycle-expect-grid">${expectRows}</div>
+      <p class="muted cycle-disclaimer">تقدير تقريبي بناءً على الأيام التي سجّلتِها، وليس بديلاً عن استشارة طبية — وكل جسم يختلف عن الآخر.</p>
     `;
   }
 
@@ -766,13 +812,11 @@
       `;
     }
 
-    // Spell out what the flame rows actually mean — they're not just
-    // "a good week", they're the same consecutive-week streak shown in
-    // the card above, so say the count here too instead of leaving the
-    // reader to infer it from the highlighted bands alone.
+    // Short label so the flame rows read as "these weeks are the streak"
+    // without a full sentence.
     const streakNote = streak > 0
-      ? `🔥 سلسلة ${arWeeksLabel(streak)} متتالية ملتزمة بهدف التمرين الأسبوعي — الأسابيع المميزة بالأسفل هي أسابيع سلسلتك`
-      : 'أكملي هدفك الأسبوعي لتبدأ سلسلة أسابيع هنا 🔥';
+      ? `🔥 ${arWeeksLabel(streak)} التزام`
+      : 'ابدئي سلسلتك 🔥';
 
     el.innerHTML = `
       <div class="month-cal-streak-note">${streakNote}</div>
