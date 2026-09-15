@@ -16,10 +16,10 @@
   --tile-2: #e2d7f2;
   --tile-3: #cfe3f2;
   --tile-4: #dfe7c8;
-  --cycle-menstrual: #d9536f;
-  --cycle-follicular: #e0a95c;
-  --cycle-ovulation: #4f9db5;
-  --cycle-luteal: #a89a8c;
+  --ring-track: #ddd6c8;
+  --cycle-period-dark: #c23a52;
+  --cycle-period-light: #f0b3bc;
+  --cycle-fertile: #4f9db5;
   --radius: 18px;
   --font-display: 'Changa', Tahoma, sans-serif;
   --font-body: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
@@ -42,10 +42,10 @@
     --tile-2: #362e46;
     --tile-3: #253647;
     --tile-4: #333d26;
-    --cycle-menstrual: #ea7a92;
-    --cycle-follicular: #f0c17e;
-    --cycle-ovulation: #7ec3d6;
-    --cycle-luteal: #b7ab99;
+    --ring-track: #3a352c;
+    --cycle-period-dark: #e8768c;
+    --cycle-period-light: #a5626d;
+    --cycle-fertile: #7ec3d6;
   }
 }
 
@@ -65,10 +65,10 @@
   --tile-2: #362e46;
   --tile-3: #253647;
   --tile-4: #333d26;
-  --cycle-menstrual: #ea7a92;
-  --cycle-follicular: #f0c17e;
-  --cycle-ovulation: #7ec3d6;
-  --cycle-luteal: #b7ab99;
+  --ring-track: #3a352c;
+  --cycle-period-dark: #e8768c;
+  --cycle-period-light: #a5626d;
+  --cycle-fertile: #7ec3d6;
 }
 
 * { box-sizing: border-box; }
@@ -586,16 +586,29 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 
 .cycle-ring-wrap {
   position: relative;
-  width: 180px;
-  height: 180px;
-  margin: 4px auto 14px;
+  width: 220px;
+  height: 220px;
+  margin: 4px auto 18px;
 }
-.cycle-ring-svg { width: 180px; height: 180px; }
-.cycle-ring-bg, .cycle-ring-seg { fill: none; stroke-width: 13; }
-.cycle-ring-bg { stroke: var(--surface-2); }
-.cycle-ring-seg { stroke-linecap: round; transform-origin: 90px 90px; }
-.cycle-ring-dot { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
-.cycle-ring-dot-core { fill: var(--ink); }
+.cycle-ring-svg { width: 220px; height: 220px; overflow: visible; }
+.cycle-ring-bg, .cycle-ring-seg { fill: none; }
+.cycle-ring-bg { stroke: var(--ring-track); stroke-linecap: round; }
+.cycle-ring-seg { stroke-linecap: round; transform-origin: 110px 110px; }
+.cycle-ring-drop { font-size: 13px; }
+.cycle-ring-badge-bg {
+  fill: var(--surface);
+  stroke: var(--border);
+  stroke-width: 1;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.18));
+}
+.cycle-ring-badge-label { font-size: 8px; fill: var(--muted); text-anchor: middle; }
+.cycle-ring-badge-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  fill: var(--ink);
+  text-anchor: middle;
+}
 .cycle-ring-center {
   position: absolute;
   inset: 0;
@@ -604,31 +617,31 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 0 20px;
+  padding: 0 34px;
 }
-.cycle-ring-icon { font-size: 1.7rem; line-height: 1; margin-bottom: 4px; }
-.cycle-ring-day {
+.cycle-ring-today { font-size: 0.78rem; color: var(--muted); }
+.cycle-ring-headline {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 1.15rem;
   color: var(--ink);
+  margin-top: 6px;
+  line-height: 1.35;
 }
-.cycle-ring-sub { font-size: 0.76rem; color: var(--muted); margin-top: 3px; line-height: 1.4; }
 
-.cycle-phase-badge {
-  background: var(--accent-soft);
+.cycle-phase-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--ink);
+  line-height: 1.6;
+  padding: 12px;
+  background: var(--surface-2);
   border-radius: 10px;
-  padding: 14px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
-.cycle-phase-name {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--accent-dark);
-}
-.cycle-phase-tip { font-size: 0.85rem; color: var(--ink); margin-top: 4px; line-height: 1.6; }
-.cycle-note { font-size: 0.82rem; margin: 6px 0 0; }
+.cycle-phase-icon { font-size: 1.2rem; line-height: 1.4; }
 .cycle-disclaimer { font-size: 0.72rem; margin: 8px 0 0; }
 
 /* ---------- measurement guide ---------- */

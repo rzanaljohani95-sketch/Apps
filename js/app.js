@@ -239,13 +239,6 @@
     return { cycleDay, cycleLen, periodLen, phase, daysUntilNextPeriod, lastStart, ovulationDay };
   }
 
-  const CYCLE_RING_COLORS = {
-    menstrual: 'var(--cycle-menstrual)',
-    follicular: 'var(--cycle-follicular)',
-    ovulation: 'var(--cycle-ovulation)',
-    luteal: 'var(--cycle-luteal)',
-  };
-
   function cycleRingSegment(dayStart, dayEnd, cycleLen, circumference) {
     const start = Math.max(1, dayStart);
     const end = Math.min(cycleLen, dayEnd);
@@ -256,34 +249,46 @@
     return { length, rotateDeg };
   }
 
+  function polarPoint(cx, cy, r, dayIndex, cycleLen) {
+    const angle = ((dayIndex - 1) / cycleLen) * 2 * Math.PI - Math.PI / 2;
+    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+  }
+
+  // A grey track for the full cycle, with only the period (fading red to
+  // pink) and the fertile window (blue) picked out in color — mirrors how
+  // period-tracking apps like Clue draw this ring, rather than tinting
+  // every phase a different hue.
   function buildCycleRingSvg(info) {
-    const size = 180, r = 72, cx = size / 2, cy = size / 2;
+    const size = 220, r = 88, cx = size / 2, cy = size / 2, sw = 20;
     const circumference = 2 * Math.PI * r;
 
-    const segments = [
-      { key: 'menstrual', range: [1, info.periodLen] },
-      { key: 'follicular', range: [info.periodLen + 1, info.ovulationDay - 2] },
-      { key: 'ovulation', range: [info.ovulationDay - 1, info.ovulationDay + 1] },
-      { key: 'luteal', range: [info.ovulationDay + 2, info.cycleLen] },
+    const periodMid = Math.ceil(info.periodLen / 2);
+    const arcs = [
+      { range: [1, periodMid], color: 'var(--cycle-period-dark)' },
+      { range: [periodMid + 1, info.periodLen], color: 'var(--cycle-period-light)' },
+      { range: [info.ovulationDay - 1, info.ovulationDay + 1], color: 'var(--cycle-fertile)' },
     ];
 
-    const segEls = segments.map(seg => {
+    const arcEls = arcs.map(seg => {
       const s = cycleRingSegment(seg.range[0], seg.range[1], info.cycleLen, circumference);
       if (!s) return '';
-      return `<circle cx="${cx}" cy="${cy}" r="${r}" class="cycle-ring-seg" style="stroke:${CYCLE_RING_COLORS[seg.key]};stroke-dasharray:${s.length} ${circumference - s.length};transform:rotate(${s.rotateDeg}deg)"/>`;
+      return `<circle cx="${cx}" cy="${cy}" r="${r}" class="cycle-ring-seg" style="stroke:${seg.color};stroke-dasharray:${s.length} ${circumference - s.length};transform:rotate(${s.rotateDeg}deg)"/>`;
     }).join('');
 
+    const dropPoint = polarPoint(cx, cy, r, 1, info.cycleLen);
+    const dropEl = `<text x="${dropPoint.x.toFixed(1)}" y="${(dropPoint.y - 16).toFixed(1)}" text-anchor="middle" class="cycle-ring-drop">💧</text>`;
+
     const todayCycleDay = Math.min(info.cycleLen, Math.max(1, info.cycleDay));
-    const todayAngle = ((todayCycleDay - 1) / info.cycleLen) * 2 * Math.PI - Math.PI / 2;
-    const dotX = cx + r * Math.cos(todayAngle);
-    const dotY = cy + r * Math.sin(todayAngle);
+    const badgePoint = polarPoint(cx, cy, r, todayCycleDay, info.cycleLen);
 
     return `
       <svg viewBox="0 0 ${size} ${size}" class="cycle-ring-svg">
-        <circle cx="${cx}" cy="${cy}" r="${r}" class="cycle-ring-bg"/>
-        ${segEls}
-        <circle cx="${dotX.toFixed(1)}" cy="${dotY.toFixed(1)}" r="7" class="cycle-ring-dot"/>
-        <circle cx="${dotX.toFixed(1)}" cy="${dotY.toFixed(1)}" r="3" class="cycle-ring-dot-core"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" class="cycle-ring-bg" style="stroke-width:${sw}"/>
+        <g style="stroke-width:${sw}">${arcEls}</g>
+        ${dropEl}
+        <circle cx="${badgePoint.x.toFixed(1)}" cy="${badgePoint.y.toFixed(1)}" r="21" class="cycle-ring-badge-bg"/>
+        <text x="${badgePoint.x.toFixed(1)}" y="${(badgePoint.y - 4).toFixed(1)}" text-anchor="middle" class="cycle-ring-badge-label">اليوم</text>
+        <text x="${badgePoint.x.toFixed(1)}" y="${(badgePoint.y + 12).toFixed(1)}" text-anchor="middle" class="cycle-ring-badge-num">${todayCycleDay}</text>
       </svg>
     `;
   }
@@ -296,27 +301,22 @@
       return;
     }
     const phaseInfo = CYCLE_PHASES[info.phase];
-    const centerSub = info.daysUntilNextPeriod <= 0
+    const centerHeadline = info.daysUntilNextPeriod <= 0
       ? `متأخرة ${Math.abs(info.daysUntilNextPeriod)} يوم تقريبًا`
       : `${info.daysUntilNextPeriod} يوم حتى دورتك القادمة`;
-    const overdueNote = info.daysUntilNextPeriod <= 0
-      ? `<p class="muted cycle-note">⚠️ تجاوزتِ الموعد المتوقع — الحساب تقديري ويتحسّن مع تسجيل المزيد من الدورات.</p>`
-      : '';
 
     card.innerHTML = `
       <div class="cycle-ring-wrap">
         ${buildCycleRingSvg(info)}
         <div class="cycle-ring-center">
-          <div class="cycle-ring-icon">${phaseInfo.icon}</div>
-          <div class="cycle-ring-day">اليوم ${info.cycleDay}</div>
-          <div class="cycle-ring-sub">${centerSub}</div>
+          <div class="cycle-ring-today">اليوم، ${formatDateAr(todayStr())}</div>
+          <div class="cycle-ring-headline">${centerHeadline}</div>
         </div>
       </div>
-      <div class="cycle-phase-badge">
-        <div class="cycle-phase-name">${phaseInfo.label}</div>
-        <div class="cycle-phase-tip">${phaseInfo.tip}</div>
+      <div class="cycle-phase-line">
+        <span class="cycle-phase-icon">${phaseInfo.icon}</span>
+        <span><strong>${phaseInfo.label}</strong> — ${phaseInfo.tip}</span>
       </div>
-      ${overdueNote}
       <p class="muted cycle-disclaimer">تقدير تقريبي بناءً على الأيام التي سجّلتِها، وليس بديلاً عن استشارة طبية.</p>
     `;
   }
@@ -431,9 +431,18 @@
     document.getElementById('workoutType').value = w?.type ?? '';
     document.getElementById('workoutDuration').value = w?.duration ?? '';
     document.getElementById('workoutNotes').value = w?.notes ?? '';
-    onPeriodInput.checked = !!entry?.onPeriod;
+    // A day with no saved entry yet inherits the previous day's period
+    // state, so marking "on period" once carries forward automatically
+    // instead of needing a fresh tap every day — the viewer only needs to
+    // uncheck it on the day the period actually ends.
+    onPeriodInput.checked = entry ? !!entry.onPeriod : periodCarriesInto(date);
     updateDailyGoalBadges();
     renderWeekCalendar();
+  }
+
+  function periodCarriesInto(date) {
+    const prevDate = toDateStr(new Date(new Date(date + 'T00:00:00').getTime() - 86400000));
+    return !!state.dailyLogs[prevDate]?.onPeriod;
   }
 
   const AR_DAY_NAMES = ['سبت', 'أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
