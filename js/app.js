@@ -420,6 +420,12 @@
     workoutDetails.classList.toggle('hidden', !workoutDoneInput.checked);
   });
 
+  onPeriodInput.addEventListener('change', () => {
+    document.getElementById('onPeriodLabel').textContent = onPeriodInput.checked
+      ? '🩸 دورتك مستمرة — اضغطي هنا إذا انتهت اليوم'
+      : '🩸 على الدورة اليوم؟';
+  });
+
   dailyDateInput.addEventListener('change', loadDailyFormForDate);
 
   const caloriesInput = document.getElementById('calories');
@@ -453,6 +459,7 @@
     // instead of needing a fresh tap every day — the viewer only needs to
     // uncheck it on the day the period actually ends.
     onPeriodInput.checked = entry ? !!entry.onPeriod : periodCarriesInto(date);
+    updatePeriodFieldUI(date);
     updateDailyGoalBadges();
     renderWeekCalendar();
   }
@@ -460,6 +467,22 @@
   function periodCarriesInto(date) {
     const prevDate = toDateStr(new Date(new Date(date + 'T00:00:00').getTime() - 86400000));
     return !!state.dailyLogs[prevDate]?.onPeriod;
+  }
+
+  // The period field only earns its place on the form when it's actually
+  // relevant: no cycle logged yet (so she can start one), currently mid-
+  // period, or the next period is expected soon — not on every ordinary day.
+  function updatePeriodFieldUI(date) {
+    const info = computeCycleInfo(date);
+    // computeCycleInfo only knows about saved days, so a period still being
+    // logged (checked here but not saved past today yet) can look "already
+    // over" to it — onPeriodInput.checked is the ground truth for "currently
+    // on period" and always keeps the field visible regardless.
+    const relevant = !info || info.phase === 'menstrual' || info.daysUntilNextPeriod <= 3 || onPeriodInput.checked;
+    document.getElementById('onPeriodField').classList.toggle('hidden', !relevant);
+    document.getElementById('onPeriodLabel').textContent = onPeriodInput.checked
+      ? '🩸 دورتك مستمرة — اضغطي هنا إذا انتهت اليوم'
+      : '🩸 على الدورة اليوم؟';
   }
 
   const AR_DAY_NAMES = ['سبت', 'أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
