@@ -305,6 +305,22 @@
       ? `متأخرة ${Math.abs(info.daysUntilNextPeriod)} يوم تقريبًا`
       : `${info.daysUntilNextPeriod} يوم حتى دورتك القادمة`;
 
+    const clusters = getPeriodClusters();
+    const lastCluster = clusters[clusters.length - 1];
+    const stillOngoing = info.phase === 'menstrual' && lastCluster && lastCluster.end >= todayStr();
+    const datesRow = lastCluster ? `
+      <div class="cycle-dates-row">
+        <div class="cycle-date-item">
+          <span class="cycle-date-label">بداية الدورة</span>
+          <span class="cycle-date-value">${formatDateAr(lastCluster.start)}</span>
+        </div>
+        <div class="cycle-date-item">
+          <span class="cycle-date-label">نهاية الدورة</span>
+          <span class="cycle-date-value">${stillOngoing ? 'مستمرة الآن' : formatDateAr(lastCluster.end)}</span>
+        </div>
+      </div>
+    ` : '';
+
     card.innerHTML = `
       <div class="cycle-ring-wrap">
         ${buildCycleRingSvg(info)}
@@ -313,6 +329,7 @@
           <div class="cycle-ring-headline">${centerHeadline}</div>
         </div>
       </div>
+      ${datesRow}
       <div class="cycle-phase-line">
         <span class="cycle-phase-icon">${phaseInfo.icon}</span>
         <span><strong>${phaseInfo.label}</strong> — ${phaseInfo.tip}</span>
