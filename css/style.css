@@ -346,56 +346,23 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 }
 
 .month-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  height: 120px;
-  padding: 4px 2px 0;
+  padding-top: 4px;
 }
 
-.month-bar-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  height: 100%;
-  gap: 6px;
-}
-
-.month-bar-value {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.month-bar-track {
+.month-line-svg {
   width: 100%;
-  max-width: 34px;
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  background: var(--surface-2);
-  border-radius: 6px;
-  overflow: hidden;
+  height: auto;
+  aspect-ratio: 3 / 1;
+  display: block;
+  overflow: visible;
 }
 
-.month-bar-fill {
-  width: 100%;
-  border-radius: 6px;
-  background: var(--accent);
-  min-height: 3px;
-  transition: height 0.2s ease;
-}
-
-.month-bar-fill.bar-current { background: var(--accent-dark); }
-.month-bar-fill.bar-empty { background: var(--border); }
-
-.month-bar-label {
-  font-size: 0.72rem;
-  color: var(--muted);
-  white-space: nowrap;
-}
+.month-line-area { fill: var(--accent); opacity: 0.12; stroke: none; }
+.month-line-path { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.month-line-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.month-line-dot.current { fill: var(--accent-dark); stroke: var(--accent-dark); }
+.month-line-value { font-size: 11px; font-weight: 700; fill: var(--accent-dark); text-anchor: middle; }
+.month-line-week { font-size: 9px; fill: var(--muted); text-anchor: middle; }
 
 .stats-grid {
   display: grid;
@@ -493,6 +460,7 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .streak-info { flex: 1; }
 .streak-flame { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--ink); }
 .streak-sub { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+.streak-flame-secondary { font-size: 0.85rem; font-weight: 500; margin-top: 8px; color: var(--accent-dark); }
 
 .chart-controls {
   display: flex;

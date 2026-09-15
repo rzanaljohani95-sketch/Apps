@@ -118,10 +118,14 @@
 
     try {
       const snap = await db.doc('app/state').get();
-      if (localWritesBeforeCloudReady) {
-        // The viewer already changed something in-memory while this read
-        // was in flight — that edit wins; push it up instead of pulling
-        // the (now stale) snapshot over it.
+      // A local write before this read resolved should normally win (it's
+      // the viewer editing while the read was still in flight) — but ONLY
+      // when the local copy actually has real data. A brand-new/empty
+      // session (fresh device, cleared storage, ...) must never push an
+      // empty state over a cloud document that already has history in it;
+      // that would silently destroy everything already saved.
+      const localHasData = Object.keys(state.dailyLogs).length > 0 || state.measurements.length > 0;
+      if (localWritesBeforeCloudReady && (localHasData || !snap.exists)) {
         await db.doc('app/state').set(state);
       } else if (snap.exists) {
         state = normalizeState(snap.data());
@@ -130,7 +134,6 @@
       }
       cloudReady = true;
       syncStatus = 'cloud';
-      applyOneTimeSeeds();
       renderAll();
       showToast('☁️ الحفظ السحابي مفعّل — بياناتك محفوظة بأمان');
     } catch (e) {
@@ -142,29 +145,6 @@
       state = normalizeState(snap.data());
       renderAll();
     }, e => console.error('Cloud sync error.', e));
-  }
-
-  // One-time import of the workout streak the user already had in another
-  // tracker before switching here, so her existing streak isn't lost.
-  function applyOneTimeSeeds() {
-    if (state.seedFlags && state.seedFlags.streakSep2026) return;
-    ['2026-09-02', '2026-09-03', '2026-09-06', '2026-09-07', '2026-09-09', '2026-09-12'].forEach(d => {
-      const existing = state.dailyLogs[d] || {};
-      state.dailyLogs[d] = {
-        steps: existing.steps ?? null,
-        calories: existing.calories ?? null,
-        protein: existing.protein ?? null,
-        onPeriod: existing.onPeriod ?? false,
-        workout: {
-          done: true,
-          type: existing.workout?.type || '',
-          duration: existing.workout?.duration ?? null,
-          notes: existing.workout?.notes || '',
-        },
-      };
-    });
-    state.seedFlags = { ...(state.seedFlags || {}), streakSep2026: true };
-    saveState();
   }
 
   /* ============================ HELPERS ============================ */
@@ -660,10 +640,56 @@
     return streak;
   }
 
+  // Consecutive days (ending today or yesterday, so a not-yet-filled "today"
+  // doesn't zero out an otherwise-intact streak) that have any daily entry
+  // logged — rewards the logging habit itself, separately from the
+  // workout-goal-based weekly streak.
+  function computeDailyLogStreak() {
+    let streak = 0;
+    const cursor = new Date();
+    if (!state.dailyLogs[todayStr()]) cursor.setDate(cursor.getDate() - 1);
+    for (let i = 0; i < 366; i++) {
+      const ds = toDateStr(cursor);
+      if (!state.dailyLogs[ds]) break;
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+  }
+
   function arWeeksLabel(n) {
     if (n === 1) return 'أسبوع واحد';
     if (n === 2) return 'أسبوعين';
     return `${n} أسابيع`;
+  }
+
+  function arDaysLabel(n) {
+    if (n === 1) return 'يوم واحد';
+    if (n === 2) return 'يومين';
+    return `${n} أيام`;
+  }
+
+  // Tiered milestone phrases: as the streak climbs past each threshold the
+  // wording itself changes (not just the number), so every new personal
+  // best feels like a fresh achievement instead of the same sentence again.
+  const WEEK_STREAK_MILESTONES = [
+    { min: 12, text: n => `🏆 إنجاز استثنائي — سلسلة ${arWeeksLabel(n)} متتالية بدون انقطاع!` },
+    { min: 8,  text: n => `🌟 مذهلة! سلسلة ${arWeeksLabel(n)} متتالية` },
+    { min: 4,  text: n => `💪 شهر كامل من الالتزام — سلسلة ${arWeeksLabel(n)} متتالية` },
+    { min: 2,  text: n => `🔥 استمراريتك رائعة — سلسلة ${arWeeksLabel(n)} متتالية` },
+    { min: 1,  text: n => `🔥 سلسلة ${arWeeksLabel(n)} متتالية` },
+    { min: 0,  text: () => 'أكملي هدفك الأسبوعي لتبدئي سلسلتك 🔥' },
+  ];
+  const DAY_STREAK_MILESTONES = [
+    { min: 30, text: n => `🏆 شهر كامل من التسجيل اليومي — ${arDaysLabel(n)} متواصلة!` },
+    { min: 14, text: n => `🌟 أسبوعان متواصلان من الانضباط — ${arDaysLabel(n)}` },
+    { min: 7,  text: n => `✨ أسبوع كامل من التسجيل — ${arDaysLabel(n)} متتالية` },
+    { min: 3,  text: n => `📈 بداية قوية — ${arDaysLabel(n)} تسجيل متتالية` },
+    { min: 1,  text: n => `📝 ${arDaysLabel(n)} تسجيل متتالية` },
+    { min: 0,  text: () => 'سجّلي اليوم لتبدئي سلسلة تسجيل يومية 📝' },
+  ];
+  function milestonePhrase(milestones, n) {
+    return milestones.find(t => n >= t.min).text(n);
   }
 
   function renderWeeklyProgress() {
@@ -672,13 +698,13 @@
     const workoutDays = dates.filter(d => state.dailyLogs[d].workout?.done).length;
     const goal = state.settings.weeklyWorkoutGoal;
     const pct = Math.min(1, goal ? workoutDays / goal : 0);
-    const streak = computeWeeklyStreak();
+    const weekStreak = computeWeeklyStreak();
+    const dayStreak = computeDailyLogStreak();
 
     const r = 34, circumference = 2 * Math.PI * r;
     const offset = circumference * (1 - pct);
-    const streakText = streak === 0
-      ? 'أكملي هدفك الأسبوعي لتبدئي سلسلتك 🔥'
-      : `🔥 سلسلة ${arWeeksLabel(streak)} متتالية`;
+    const streakText = milestonePhrase(WEEK_STREAK_MILESTONES, weekStreak);
+    const dayStreakText = milestonePhrase(DAY_STREAK_MILESTONES, dayStreak);
 
     const el = document.getElementById('weeklyWorkoutProgress');
     el.innerHTML = `
@@ -693,6 +719,7 @@
         <div class="streak-info">
           <div class="streak-flame">${streakText}</div>
           <div class="streak-sub">${workoutDays} من ${goal} أيام تمرين هذا الأسبوع</div>
+          <div class="streak-flame streak-flame-secondary">${dayStreakText}</div>
         </div>
       </div>
     `;
@@ -717,46 +744,61 @@
     `;
   }
 
-  // Simple bar chart: one bar per (Arabic) week that overlaps the current
-  // calendar month, showing how many workout days were logged that week.
+  // Simple minimal line chart (one point per week overlapping the current
+  // calendar month) showing workout days logged that week — a light
+  // sparkline rather than a heavy bar grid.
   function renderMonthlyProgressChart() {
     const el = document.getElementById('monthlyProgressChart');
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const goal = state.settings.weeklyWorkoutGoal || 4;
-    const todayWeekStart = toDateStr(weekStart(now));
+    const todayDay = now.getDate();
 
+    // Always exactly 4 buckets ("a month = 4 weeks"), splitting the
+    // month's days evenly instead of following calendar week boundaries
+    // (which can add a stray 5th/6th partial week depending on the month).
+    const bucketSize = Math.ceil(daysInMonth / 4);
     const weeks = [];
-    let cursor = weekStart(monthStart);
-    while (cursor <= monthEnd) {
-      const we = new Date(cursor);
-      we.setDate(we.getDate() + 6);
-      const datesInWeek = Object.keys(state.dailyLogs).filter(d => {
-        const dd = new Date(d + 'T00:00:00');
-        return dd >= cursor && dd <= we && dd >= monthStart && dd <= monthEnd;
-      });
-      const workoutDays = datesInWeek.filter(d => state.dailyLogs[d].workout?.done).length;
-      weeks.push({ start: toDateStr(cursor), workoutDays });
-      cursor = new Date(cursor);
-      cursor.setDate(cursor.getDate() + 7);
+    for (let b = 0; b < 4; b++) {
+      const dayFrom = b * bucketSize + 1;
+      const dayTo = Math.min(daysInMonth, dayFrom + bucketSize - 1);
+      if (dayFrom > daysInMonth) break;
+      let workoutDays = 0;
+      for (let d = dayFrom; d <= dayTo; d++) {
+        const ds = toDateStr(new Date(now.getFullYear(), now.getMonth(), d));
+        if (state.dailyLogs[ds]?.workout?.done) workoutDays++;
+      }
+      const isCurrent = todayDay >= dayFrom && todayDay <= dayTo;
+      weeks.push({ dayFrom, dayTo, workoutDays, isCurrent });
     }
 
     const maxVal = Math.max(goal, ...weeks.map(w => w.workoutDays), 1);
-    el.innerHTML = weeks.map((w, i) => {
-      const pct = Math.round((w.workoutDays / maxVal) * 100);
-      const isCurrent = w.start === todayWeekStart;
-      const fillCls = w.workoutDays === 0 ? 'bar-empty' : (isCurrent ? 'bar-current' : '');
-      return `
-        <div class="month-bar-col">
-          <div class="month-bar-value">${w.workoutDays}</div>
-          <div class="month-bar-track">
-            <div class="month-bar-fill ${fillCls}" style="height:${Math.max(pct, w.workoutDays ? 6 : 2)}%"></div>
-          </div>
-          <div class="month-bar-label">أسبوع ${i + 1}</div>
-        </div>
-      `;
-    }).join('') || '<p class="muted">لا توجد بيانات لهذا الشهر بعد</p>';
+    const W = 300, H = 100, padX = 18, padTop = 22, padBottom = 22;
+    const n = weeks.length;
+    const stepX = n > 1 ? (W - padX * 2) / (n - 1) : 0;
+    const yFor = v => H - padBottom - (v / maxVal) * (H - padTop - padBottom);
+    const points = weeks.map((w, i) => ({ x: padX + i * stepX, y: yFor(w.workoutDays) }));
+
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const areaPath = `${linePath} L${points[n - 1].x.toFixed(1)},${(H - padBottom).toFixed(1)} L${points[0].x.toFixed(1)},${(H - padBottom).toFixed(1)} Z`;
+
+    const marks = points.map((p, i) => {
+      const isCurrent = weeks[i].isCurrent;
+      const valueLabel = isCurrent
+        ? `<text x="${p.x.toFixed(1)}" y="${(p.y - 12).toFixed(1)}" text-anchor="middle" class="month-line-value">${weeks[i].workoutDays}</text>`
+        : '';
+      return `${valueLabel}
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isCurrent ? 5 : 3}" class="month-line-dot${isCurrent ? ' current' : ''}"/>
+        <text x="${p.x.toFixed(1)}" y="${H - 4}" text-anchor="middle" class="month-line-week">أ${i + 1}</text>`;
+    }).join('');
+
+    el.innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" class="month-line-svg">
+        <path d="${areaPath}" class="month-line-area"/>
+        <path d="${linePath}" class="month-line-path"/>
+        ${marks}
+      </svg>
+    `;
   }
 
   function calorieCellHtml(value) {
@@ -1461,7 +1503,6 @@
     renderChart();
   }
 
-  applyOneTimeSeeds();
   renderAll();
   initCloudSync();
   initAssistant();
