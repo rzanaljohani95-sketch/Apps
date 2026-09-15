@@ -236,7 +236,56 @@
     else if (cycleDay <= ovulationDay + 1) phase = 'ovulation';
     else phase = 'luteal';
 
-    return { cycleDay, cycleLen, periodLen, phase, daysUntilNextPeriod, lastStart };
+    return { cycleDay, cycleLen, periodLen, phase, daysUntilNextPeriod, lastStart, ovulationDay };
+  }
+
+  const CYCLE_RING_COLORS = {
+    menstrual: 'var(--cycle-menstrual)',
+    follicular: 'var(--cycle-follicular)',
+    ovulation: 'var(--cycle-ovulation)',
+    luteal: 'var(--cycle-luteal)',
+  };
+
+  function cycleRingSegment(dayStart, dayEnd, cycleLen, circumference) {
+    const start = Math.max(1, dayStart);
+    const end = Math.min(cycleLen, dayEnd);
+    if (end < start) return null;
+    const fraction = (end - start + 1) / cycleLen;
+    const length = fraction * circumference;
+    const rotateDeg = ((start - 1) / cycleLen) * 360 - 90;
+    return { length, rotateDeg };
+  }
+
+  function buildCycleRingSvg(info) {
+    const size = 180, r = 72, cx = size / 2, cy = size / 2;
+    const circumference = 2 * Math.PI * r;
+
+    const segments = [
+      { key: 'menstrual', range: [1, info.periodLen] },
+      { key: 'follicular', range: [info.periodLen + 1, info.ovulationDay - 2] },
+      { key: 'ovulation', range: [info.ovulationDay - 1, info.ovulationDay + 1] },
+      { key: 'luteal', range: [info.ovulationDay + 2, info.cycleLen] },
+    ];
+
+    const segEls = segments.map(seg => {
+      const s = cycleRingSegment(seg.range[0], seg.range[1], info.cycleLen, circumference);
+      if (!s) return '';
+      return `<circle cx="${cx}" cy="${cy}" r="${r}" class="cycle-ring-seg" style="stroke:${CYCLE_RING_COLORS[seg.key]};stroke-dasharray:${s.length} ${circumference - s.length};transform:rotate(${s.rotateDeg}deg)"/>`;
+    }).join('');
+
+    const todayCycleDay = Math.min(info.cycleLen, Math.max(1, info.cycleDay));
+    const todayAngle = ((todayCycleDay - 1) / info.cycleLen) * 2 * Math.PI - Math.PI / 2;
+    const dotX = cx + r * Math.cos(todayAngle);
+    const dotY = cy + r * Math.sin(todayAngle);
+
+    return `
+      <svg viewBox="0 0 ${size} ${size}" class="cycle-ring-svg">
+        <circle cx="${cx}" cy="${cy}" r="${r}" class="cycle-ring-bg"/>
+        ${segEls}
+        <circle cx="${dotX.toFixed(1)}" cy="${dotY.toFixed(1)}" r="7" class="cycle-ring-dot"/>
+        <circle cx="${dotX.toFixed(1)}" cy="${dotY.toFixed(1)}" r="3" class="cycle-ring-dot-core"/>
+      </svg>
+    `;
   }
 
   function renderCycleCard() {
@@ -247,16 +296,25 @@
       return;
     }
     const phaseInfo = CYCLE_PHASES[info.phase];
+    const centerSub = info.daysUntilNextPeriod <= 0
+      ? `متأخرة ${Math.abs(info.daysUntilNextPeriod)} يوم تقريبًا`
+      : `${info.daysUntilNextPeriod} يوم حتى دورتك القادمة`;
     const overdueNote = info.daysUntilNextPeriod <= 0
-      ? `<p class="muted cycle-note">⚠️ تجاوزتِ الموعد المتوقع بنحو ${Math.abs(info.daysUntilNextPeriod)} يوم — الحساب تقديري ويتحسّن مع تسجيل المزيد من الدورات.</p>`
-      : `<p class="muted cycle-note">الدورة القادمة متوقعة خلال ${info.daysUntilNextPeriod} يوم تقريبًا (تقدير).</p>`;
+      ? `<p class="muted cycle-note">⚠️ تجاوزتِ الموعد المتوقع — الحساب تقديري ويتحسّن مع تسجيل المزيد من الدورات.</p>`
+      : '';
+
     card.innerHTML = `
-      <div class="cycle-phase-badge">
-        <span class="cycle-phase-icon">${phaseInfo.icon}</span>
-        <div>
-          <div class="cycle-phase-name">${phaseInfo.label} — اليوم ${info.cycleDay} من الدورة</div>
-          <div class="cycle-phase-tip">${phaseInfo.tip}</div>
+      <div class="cycle-ring-wrap">
+        ${buildCycleRingSvg(info)}
+        <div class="cycle-ring-center">
+          <div class="cycle-ring-icon">${phaseInfo.icon}</div>
+          <div class="cycle-ring-day">اليوم ${info.cycleDay}</div>
+          <div class="cycle-ring-sub">${centerSub}</div>
         </div>
+      </div>
+      <div class="cycle-phase-badge">
+        <div class="cycle-phase-name">${phaseInfo.label}</div>
+        <div class="cycle-phase-tip">${phaseInfo.tip}</div>
       </div>
       ${overdueNote}
       <p class="muted cycle-disclaimer">تقدير تقريبي بناءً على الأيام التي سجّلتِها، وليس بديلاً عن استشارة طبية.</p>
