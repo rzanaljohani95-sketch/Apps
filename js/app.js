@@ -749,7 +749,10 @@
   // sparkline rather than a heavy bar grid.
   // Month calendar grid with workout days circled — the same idea as the
   // "streak calendar" screens common in fitness apps, in the app's own
-  // warm palette instead of a line chart.
+  // warm palette instead of a line chart. Each displayed row is also a
+  // full Saturday-Friday week, so a row that hit the weekly workout goal
+  // gets a highlighted band + flame — a weekly streak marker laid over
+  // the monthly view.
   function renderMonthlyProgressChart() {
     const el = document.getElementById('monthlyProgressChart');
     const now = new Date();
@@ -757,21 +760,44 @@
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstWeekday = (new Date(year, month, 1).getDay() + 1) % 7; // 0 = Saturday
     const today = todayStr();
+    const goal = state.settings.weeklyWorkoutGoal || 4;
 
     const header = AR_DAY_NAMES.map(n => `<div class="month-cal-dow">${n.slice(0, 2)}</div>`).join('');
 
-    let cells = '';
-    for (let i = 0; i < firstWeekday; i++) cells += '<div class="month-cal-cell empty"></div>';
-    for (let d = 1; d <= daysInMonth; d++) {
-      const ds = toDateStr(new Date(year, month, d));
-      const done = !!state.dailyLogs[ds]?.workout?.done;
-      const cls = ['month-cal-cell'];
-      if (done) cls.push('done');
-      if (ds === today) cls.push('today');
-      cells += `<div class="${cls.join(' ')}"><span>${d}</span></div>`;
+    const flat = [];
+    for (let i = 0; i < firstWeekday; i++) flat.push(null);
+    for (let d = 1; d <= daysInMonth; d++) flat.push(d);
+    while (flat.length % 7 !== 0) flat.push(null);
+
+    let rows = '';
+    for (let r = 0; r < flat.length; r += 7) {
+      const rowDays = flat.slice(r, r + 7);
+      const workoutDays = rowDays.filter(d => d && state.dailyLogs[toDateStr(new Date(year, month, d))]?.workout?.done).length;
+      const weekStreak = rowDays.some(d => d !== null) && workoutDays >= goal;
+      const cells = rowDays.map(d => {
+        if (d === null) return '<div class="month-cal-cell empty"></div>';
+        const ds = toDateStr(new Date(year, month, d));
+        const done = !!state.dailyLogs[ds]?.workout?.done;
+        const cls = ['month-cal-cell'];
+        if (done) cls.push('done');
+        if (ds === today) cls.push('today');
+        return `<div class="${cls.join(' ')}"><span>${d}</span></div>`;
+      }).join('');
+      rows += `
+        <div class="month-cal-row-wrap">
+          <span class="month-cal-row-flame">${weekStreak ? '🔥' : ''}</span>
+          <div class="month-cal-row${weekStreak ? ' week-streak' : ''}">${cells}</div>
+        </div>
+      `;
     }
 
-    el.innerHTML = `<div class="month-cal-grid">${header}${cells}</div>`;
+    el.innerHTML = `
+      <div class="month-cal-row-wrap month-cal-header-wrap">
+        <span class="month-cal-row-flame"></span>
+        <div class="month-cal-row month-cal-dow-row">${header}</div>
+      </div>
+      ${rows}
+    `;
   }
 
   function calorieCellHtml(value) {
