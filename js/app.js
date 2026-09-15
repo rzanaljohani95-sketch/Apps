@@ -34,6 +34,10 @@
   function normalizeState(parsed) {
     const base = defaultState();
     if (!parsed) return base;
+    // Cloud snapshots (db.doc().get() / onSnapshot) are frozen by the
+    // platform — deep-clone before letting later code push/assign into
+    // dailyLogs or measurements, or those mutations throw.
+    parsed = JSON.parse(JSON.stringify(parsed));
     return {
       dailyLogs: parsed.dailyLogs || base.dailyLogs,
       measurements: parsed.measurements || base.measurements,
