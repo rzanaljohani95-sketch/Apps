@@ -69,12 +69,21 @@
   let dbCap = null;
   let syncStatus = 'local'; // 'local' | 'checking' | 'cloud'
 
+  // Closes a startup race: the very first cloud read is in flight for a
+  // moment after the page opens, and if the viewer saves something during
+  // that window, the in-memory state is already ahead of what that read
+  // will return. Track it so the initial reconciliation pushes the
+  // viewer's edit up instead of clobbering it with the stale read.
+  let cloudReady = false;
+  let localWritesBeforeCloudReady = false;
+
   function saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
       console.error('Failed to write local data.', e);
     }
+    if (!cloudReady) localWritesBeforeCloudReady = true;
     if (dbCap) {
       dbCap.doc('app/state').set(state).catch(e => console.error('Cloud save failed.', e));
     }
@@ -94,11 +103,17 @@
 
     try {
       const snap = await db.doc('app/state').get();
-      if (snap.exists) {
+      if (localWritesBeforeCloudReady) {
+        // The viewer already changed something in-memory while this read
+        // was in flight — that edit wins; push it up instead of pulling
+        // the (now stale) snapshot over it.
+        await db.doc('app/state').set(state);
+      } else if (snap.exists) {
         state = normalizeState(snap.data());
       } else {
         await db.doc('app/state').set(state);
       }
+      cloudReady = true;
       syncStatus = 'cloud';
       renderAll();
       showToast('☁️ الحفظ السحابي مفعّل — بياناتك محفوظة بأمان');
@@ -107,7 +122,7 @@
     }
 
     db.doc('app/state').onSnapshot(snap => {
-      if (!snap.exists || snap.metadata.hasPendingWrites) return;
+      if (!cloudReady || !snap.exists || snap.metadata.hasPendingWrites) return;
       state = normalizeState(snap.data());
       renderAll();
     }, e => console.error('Cloud sync error.', e));
@@ -269,7 +284,7 @@
   dailyForm.addEventListener('submit', e => {
     e.preventDefault();
     const date = dailyDateInput.value;
-    if (!date) return;
+    if (!date) { showToast('اختر التاريخ أولًا.'); return; }
 
     state.dailyLogs[date] = {
       steps: numOrNull(document.getElementById('steps').value),
@@ -284,6 +299,7 @@
     };
     saveState();
     renderAll();
+    showToast('تم حفظ يوم ' + formatDateAr(date) + '.');
   });
 
   function numOrNull(v) {
@@ -411,7 +427,7 @@
   document.getElementById('measureForm').addEventListener('submit', e => {
     e.preventDefault();
     const date = document.getElementById('measureDate').value;
-    if (!date) return;
+    if (!date) { showToast('اختر تاريخ القياس أولًا.'); return; }
     const entry = { id: `${date}-${Date.now()}`, date };
     MEASURE_FIELDS.forEach(f => {
       entry[f.key] = numOrNull(document.getElementById(`m_${f.key}`).value);
@@ -422,6 +438,7 @@
     e.target.reset();
     document.getElementById('measureDate').value = todayStr();
     renderAll();
+    showToast('تم حفظ القياسات.');
   });
 
   function deleteMeasurement(id) {
