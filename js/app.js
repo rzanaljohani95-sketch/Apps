@@ -766,6 +766,164 @@
     e.target.value = '';
   });
 
+  /* ============================ AI ASSISTANT ============================ */
+
+  let sampleCap = null;
+  let chatTurns = []; // { role: 'user' | 'assistant', content: string }
+
+  const ASSISTANT_RULES =
+    'أنت مساعد صحي ولياقة بدنية شخصي داخل تطبيق متابعة يستخدمه شخص واحد. ' +
+    'أمامك بيانات المستخدم الفعلية بصيغة JSON (آخر 14 يومًا من سجله اليومي، وآخر قياساته، وأهدافه). ' +
+    'اعتمد فقط على هذه الأرقام — لا تخترع بيانات غير موجودة، ولا تقدّم نصائح طبية عامة لا علاقة لها بالأرقام المعطاة. ' +
+    'إن سُئلت عن شيء خارج بيانات اللياقة/الصحة المتاحة هنا، وضّح بأدب أنك مخصص لتحليل بيانات هذا التطبيق فقط. ' +
+    'أجب بالعربية الفصحى المبسطة، بإيجاز ووضوح.';
+
+  function buildAssistantContext() {
+    const dates = Object.keys(state.dailyLogs).sort().slice(-14);
+    const dailyLogsLast14Days = dates.map(d => ({ date: d, ...state.dailyLogs[d] }));
+    const recentMeasurements = [...state.measurements]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-6);
+    return {
+      today: todayStr(),
+      goals: {
+        weeklyWorkoutGoal: state.settings.weeklyWorkoutGoal,
+        calorieGoal: state.settings.calorieGoal,
+        calorieMarginPct: state.settings.calorieMarginPct,
+        proteinGoal: state.settings.proteinGoal,
+        proteinMarginPct: state.settings.proteinMarginPct,
+      },
+      measurementGoalDirections: state.settings.goalDirections,
+      dailyLogsLast14Days,
+      recentMeasurements,
+    };
+  }
+
+  function assistantErrorMessage(err) {
+    const code = err && err.code;
+    switch (code) {
+      case 'not_granted':
+      case 'sampling_disabled':
+      case 'not_declared':
+      case 'capability_disabled':
+      case 'capability_removed':
+        sampleCap = null;
+        updateAssistantAvailability(false);
+        return '⚠️ المساعد الذكي غير متاح في هذا العرض.';
+      case 'rate_limited':
+        return '⏳ عدد الطلبات كبير حاليًا، حاول بعد قليل.';
+      case 'session_expired':
+        return '🔒 يلزم تسجيل الدخول من جديد لاستخدام المساعد.';
+      case 'cancelled':
+        return '';
+      case 'prompt_too_large':
+        return '⚠️ سجلّك أكبر من اللازم لهذا الطلب حاليًا.';
+      case 'empty_completion':
+      case 'refused':
+        return '⚠️ لم يتمكن المساعد من الإجابة، جرّب صياغة مختلفة.';
+      default:
+        return '⚠️ حدث خطأ غير متوقع، حاول مرة أخرى.';
+    }
+  }
+
+  function updateAssistantAvailability(available) {
+    document.getElementById('insightsBtn').disabled = !available;
+    document.getElementById('assistantAskBtn').disabled = !available;
+    document.getElementById('assistantQuestion').disabled = !available;
+    document.getElementById('assistantUnavailable').classList.toggle('hidden', available);
+  }
+
+  async function initAssistant() {
+    updateAssistantAvailability(false);
+    if (typeof window.claude === 'undefined' || typeof window.claude.use !== 'function') return;
+    let s;
+    try {
+      s = await window.claude.use('sample');
+    } catch (e) {
+      s = null;
+    }
+    sampleCap = s;
+    updateAssistantAvailability(!!s);
+  }
+
+  document.getElementById('insightsBtn').addEventListener('click', async () => {
+    if (!sampleCap) { showToast('المساعد الذكي غير متاح في هذا العرض.'); return; }
+    const btn = document.getElementById('insightsBtn');
+    const out = document.getElementById('insightsOutput');
+    btn.disabled = true;
+    out.innerHTML = '<span class="thinking">🤔 يفكر...</span>';
+    try {
+      const context = buildAssistantContext();
+      const prompt =
+        ASSISTANT_RULES +
+        '\n\nاكتب 3 إلى 5 ملاحظات أو نصائح قصيرة (سطر أو سطرين لكل واحدة) بناءً على البيانات التالية. ' +
+        'ركّز على: الالتزام بهدف أيام التمرين الأسبوعية، اتساق السعرات والبروتين مقابل الهدف، وأي اتجاه ملحوظ بالقياسات. ' +
+        'اجعل كل نصيحة تبدأ برمز تعبيري مناسب، سطر مستقل لكل نصيحة، بدون مقدمة أو خاتمة.' +
+        '\n\nبيانات المستخدم:\n' + JSON.stringify(context);
+      const { text } = await sampleCap(prompt, {
+        modelTier: 'quick',
+        onText: ({ text }) => { out.textContent = text; },
+      });
+      out.textContent = text;
+    } catch (err) {
+      out.textContent = assistantErrorMessage(err);
+    } finally {
+      btn.disabled = !sampleCap;
+    }
+  });
+
+  function appendChatBubble(role, text, thinking) {
+    const wrap = document.getElementById('chatMessages');
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble ' + role + (thinking ? ' thinking' : '');
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+    wrap.scrollTop = wrap.scrollHeight;
+    return bubble;
+  }
+
+  async function sendAssistantQuestion() {
+    if (!sampleCap) { showToast('المساعد الذكي غير متاح في هذا العرض.'); return; }
+    const input = document.getElementById('assistantQuestion');
+    const question = input.value.trim();
+    if (!question) return;
+
+    appendChatBubble('user', question);
+    input.value = '';
+    const askBtn = document.getElementById('assistantAskBtn');
+    askBtn.disabled = true;
+    const replyBubble = appendChatBubble('assistant', '🤔 يفكر...', true);
+
+    const context = buildAssistantContext();
+    const instructions = ASSISTANT_RULES + '\n\nبيانات المستخدم:\n' + JSON.stringify(context);
+    const turnsToSend = [{ role: 'user', content: instructions }, ...chatTurns, { role: 'user', content: question }];
+
+    try {
+      const { text } = await sampleCap(turnsToSend, {
+        cache: false,
+        modelTier: 'quick',
+        onText: ({ text }) => {
+          replyBubble.classList.remove('thinking');
+          replyBubble.textContent = text;
+        },
+      });
+      replyBubble.classList.remove('thinking');
+      replyBubble.textContent = text;
+      chatTurns.push({ role: 'user', content: question }, { role: 'assistant', content: text });
+      if (chatTurns.length > 12) chatTurns = chatTurns.slice(-12);
+    } catch (err) {
+      replyBubble.classList.remove('thinking');
+      replyBubble.textContent = assistantErrorMessage(err) || '⚠️ تم الإلغاء.';
+    } finally {
+      askBtn.disabled = !sampleCap;
+    }
+  }
+
+  document.getElementById('assistantAskBtn').addEventListener('click', sendAssistantQuestion);
+  document.getElementById('assistantQuestion').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); sendAssistantQuestion(); }
+  });
+
   /* ============================ RENDER ALL ============================ */
 
   function renderAll() {
@@ -780,4 +938,5 @@
 
   renderAll();
   initCloudSync();
+  initAssistant();
 })();

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@400..700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Changa:wght@600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
 
 :root {
   --bg: #f2f4ee;
@@ -13,7 +13,7 @@
   --warn: #b5622c;
   --warn-soft: #f6e9df;
   --radius: 14px;
-  --font-display: 'Reem Kufi', Tahoma, sans-serif;
+  --font-display: 'Changa', Tahoma, sans-serif;
   --font-body: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
 }
 
@@ -62,12 +62,21 @@ body {
 }
 
 .topbar {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--accent);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 88%, white 12%), var(--accent) 65%);
   color: #fff;
   padding: 16px 20px;
+}
+.topbar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 55%);
+  pointer-events: none;
 }
 
 .topbar h1 {
@@ -103,8 +112,10 @@ textarea:focus-visible {
   display: flex;
   gap: 4px;
   padding: 10px 16px 0;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -148,11 +159,16 @@ main {
   border-radius: var(--radius);
   padding: 18px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
 .card h2 {
   font-family: var(--font-display);
-  font-weight: 500;
+  font-weight: 600;
   margin-top: 0;
   margin-bottom: 14px;
   font-size: 1.1rem;
@@ -218,6 +234,8 @@ input:focus, textarea:focus, select:focus {
 .hidden { display: none !important; }
 
 .btn-primary {
+  position: relative;
+  overflow: hidden;
   background: var(--accent);
   color: #fff;
   border: none;
@@ -227,8 +245,19 @@ input:focus, textarea:focus, select:focus {
   font-family: inherit;
   cursor: pointer;
   font-weight: 600;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.btn-primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0) 55%);
+  pointer-events: none;
 }
 .btn-primary:hover { background: var(--accent-dark); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary:disabled:hover { background: var(--accent); }
 
 .btn-secondary {
   background: var(--surface-2);
@@ -369,7 +398,9 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(10,15,12,0.5);
+  background: rgba(10,15,12,0.4);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -377,18 +408,21 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
   z-index: 50;
 }
 .modal-content {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
   border-radius: var(--radius);
   padding: 20px;
   max-width: 480px;
   width: 100%;
   max-height: 85vh;
   overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.16), inset 0 1px 0 color-mix(in srgb, white 35%, transparent);
 }
 .modal-content h2 {
   font-family: var(--font-display);
-  font-weight: 500;
+  font-weight: 600;
   margin-top: 0;
 }
 .modal-actions {
@@ -423,17 +457,82 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .sync-status.sync-ok { background: var(--accent-soft); color: var(--accent-dark); }
 .sync-status.sync-local { background: var(--warn-soft); color: var(--warn); }
 
+.settings-section-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin: 18px 0 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.settings-section-title:first-of-type { margin-top: 14px; padding-top: 0; border-top: none; }
+
+.modal-divider { border-top: 1px solid var(--border); margin: 16px 0 0; }
+
+/* ---------- assistant tab ---------- */
+
+.assistant-output {
+  white-space: pre-wrap;
+  font-size: 0.92rem;
+  line-height: 1.8;
+  color: var(--ink);
+  margin-top: 14px;
+}
+.assistant-output:empty { margin-top: 0; }
+.assistant-output .thinking { color: var(--muted); }
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+.chat-messages:empty { display: none; }
+
+.chat-bubble {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.chat-bubble.user {
+  align-self: flex-start;
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.chat-bubble.assistant {
+  align-self: flex-end;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.chat-bubble.assistant.thinking { color: var(--muted); }
+
+.chat-input-row { display: flex; gap: 8px; }
+.chat-input-row input { flex: 1; }
+
 .toast {
   position: fixed;
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--ink);
+  background: color-mix(in srgb, var(--ink) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid color-mix(in srgb, white 12%, transparent);
   color: var(--bg);
   padding: 10px 18px;
   border-radius: 999px;
   font-size: 0.88rem;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
   z-index: 60;
   max-width: 90vw;
   text-align: center;

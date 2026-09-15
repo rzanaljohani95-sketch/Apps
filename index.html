@@ -13,9 +13,10 @@
 </header>
 
 <nav class="tabs">
-  <button class="tab-btn active" data-tab="today">اليوم</button>
-  <button class="tab-btn" data-tab="measurements">القياسات الأسبوعية</button>
-  <button class="tab-btn" data-tab="history">السجل</button>
+  <button class="tab-btn active" data-tab="today">📅 اليوم</button>
+  <button class="tab-btn" data-tab="measurements">📏 القياسات</button>
+  <button class="tab-btn" data-tab="history">🗂️ السجل</button>
+  <button class="tab-btn" data-tab="assistant">✨ المساعد</button>
 </nav>
 
 <main>
@@ -23,7 +24,7 @@
   <section id="tab-today" class="tab-panel active">
 
     <div class="card">
-      <h2>تسجيل اليوم</h2>
+      <h2>📝 تسجيل اليوم</h2>
       <div id="dailyForm">
         <div class="field">
           <label for="dailyDate">التاريخ</label>
@@ -74,13 +75,13 @@
     </div>
 
     <div class="card">
-      <h2>تقدّم هذا الأسبوع</h2>
+      <h2>📊 تقدّم هذا الأسبوع</h2>
       <div id="weeklyWorkoutProgress"></div>
       <div id="weeklyStats" class="stats-grid"></div>
     </div>
 
     <div class="card">
-      <h2>آخر الأيام المسجّلة</h2>
+      <h2>🗓️ آخر الأيام المسجّلة</h2>
       <div class="table-wrap">
         <table id="recentDailyTable">
           <thead>
@@ -103,7 +104,7 @@
   <section id="tab-measurements" class="tab-panel">
 
     <div class="card">
-      <h2>تسجيل قياسات الجسم</h2>
+      <h2>📏 تسجيل قياسات الجسم</h2>
       <div id="measureForm">
         <div class="field">
           <label for="measureDate">تاريخ القياس</label>
@@ -115,7 +116,7 @@
     </div>
 
     <div class="card">
-      <h2>الرسم البياني للتقدّم الأسبوعي</h2>
+      <h2>📈 الرسم البياني للتقدّم الأسبوعي</h2>
       <div class="chart-controls">
         <label for="chartMetric">القياس:</label>
         <select id="chartMetric"></select>
@@ -127,12 +128,12 @@
     </div>
 
     <div class="card">
-      <h2>ملخّص آخر تغيّر</h2>
+      <h2>🔄 ملخّص آخر تغيّر</h2>
       <div id="deltaSummary" class="delta-grid"></div>
     </div>
 
     <div class="card">
-      <h2>سجل القياسات</h2>
+      <h2>🗂️ سجل القياسات</h2>
       <div class="table-wrap">
         <table id="measureTable">
           <thead><tr id="measureTableHead"></tr></thead>
@@ -145,7 +146,7 @@
   <!-- ===================== HISTORY TAB ===================== -->
   <section id="tab-history" class="tab-panel">
     <div class="card">
-      <h2>كل الأيام المسجّلة</h2>
+      <h2>🗓️ كل الأيام المسجّلة</h2>
       <div class="table-wrap">
         <table id="fullDailyTable">
           <thead>
@@ -164,6 +165,27 @@
       </div>
     </div>
   </section>
+
+  <!-- ===================== ASSISTANT TAB ===================== -->
+  <section id="tab-assistant" class="tab-panel">
+    <div class="card">
+      <h2>🧠 نصائح ذكية</h2>
+      <p class="muted">تحليل سريع لآخر ١٤ يومًا من سجلك وأحدث قياساتك، مبني فقط على أرقامك الفعلية.</p>
+      <button type="button" id="insightsBtn" class="btn-primary">✨ حلّل بياناتي</button>
+      <div id="insightsOutput" class="assistant-output"></div>
+    </div>
+
+    <div class="card">
+      <h2>💬 اسأل عن بياناتك</h2>
+      <p class="muted">اسأل أي سؤال عن سجلك — مثل تقدّمك الأسبوعي أو التزامك بأهدافك — والمساعد يجاوبك بالاعتماد على بياناتك المسجّلة فقط.</p>
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-input-row">
+        <input type="text" id="assistantQuestion" placeholder="مثال: كيف كان التزامي بالتمرين هذا الأسبوع؟">
+        <button type="button" id="assistantAskBtn" class="btn-primary">إرسال</button>
+      </div>
+      <p id="assistantUnavailable" class="muted hidden">⚠️ المساعد الذكي غير متاح في هذا العرض حاليًا.</p>
+    </div>
+  </section>
 </main>
 
 <!-- ===================== SETTINGS MODAL ===================== -->
@@ -171,12 +193,15 @@
   <div class="modal-content">
     <h2>الإعدادات</h2>
     <div id="syncStatusLine" class="sync-status"></div>
+
+    <div class="settings-section-title">أهداف التمرين</div>
     <div class="field">
       <label for="weeklyGoalInput">عدد أيام التمرين المستهدفة أسبوعيًا</label>
       <input type="number" id="weeklyGoalInput" min="1" max="7">
     </div>
 
-    <p class="muted">أهدافك اليومية، وهامش طبيعي حولها يُحتسب ضمنه بلوغ الهدف (نسبة مئوية من الهدف).</p>
+    <div class="settings-section-title">الأهداف اليومية</div>
+    <p class="muted">هامش طبيعي حول كل هدف يُحتسب ضمنه بلوغه (نسبة مئوية من الهدف).</p>
     <div class="grid-2">
       <div class="field">
         <label for="calorieGoalInput">هدف السعرات اليومي</label>
@@ -196,8 +221,11 @@
       </div>
     </div>
 
+    <div class="settings-section-title">أهداف القياسات</div>
     <p class="muted">حدّد لكل قياس هل الهدف تقليله أو زيادته، ليظهر لك اللون الصحيح عند التقدّم (أخضر = تقدّم نحو هدفك).</p>
     <div id="goalDirections" class="goal-directions"></div>
+
+    <div class="modal-divider"></div>
     <div class="modal-actions">
       <button id="closeSettings" class="btn-primary">حفظ وإغلاق</button>
       <button id="exportData" class="btn-secondary">تصدير البيانات (JSON)</button>
