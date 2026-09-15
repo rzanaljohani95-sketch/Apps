@@ -581,10 +581,13 @@
     field.classList.toggle('hidden', !relevant);
 
     // info.cycleDay counts calendar days since the period's saved start
-    // regardless of whether the in-between days were saved yet, so once it
-    // runs past the usual period length while still checked, surface a
-    // pointed "did it end?" prompt instead of the quiet everyday wording.
-    const overdue = !!(onPeriodInput.checked && info && info.cycleDay > info.periodLen);
+    // regardless of whether the in-between days were saved yet. Once a
+    // full 7 days have passed while still checked, surface a pointed
+    // "did it end?" prompt instead of the quiet everyday wording — a
+    // fixed 7 days rather than the learned/overridden periodLen, so this
+    // trigger stays predictable even as that average drifts over time.
+    const PERIOD_OVERDUE_DAYS = 7;
+    const overdue = !!(onPeriodInput.checked && info && info.cycleDay >= PERIOD_OVERDUE_DAYS);
     field.classList.toggle('period-overdue', overdue);
 
     const label = document.getElementById('onPeriodLabel');
