@@ -639,33 +639,10 @@
     return streak;
   }
 
-  // Consecutive days (ending today or yesterday, so a not-yet-filled "today"
-  // doesn't zero out an otherwise-intact streak) that have any daily entry
-  // logged — rewards the logging habit itself, separately from the
-  // workout-goal-based weekly streak.
-  function computeDailyLogStreak() {
-    let streak = 0;
-    const cursor = new Date();
-    if (!state.dailyLogs[todayStr()]) cursor.setDate(cursor.getDate() - 1);
-    for (let i = 0; i < 366; i++) {
-      const ds = toDateStr(cursor);
-      if (!state.dailyLogs[ds]) break;
-      streak++;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    return streak;
-  }
-
   function arWeeksLabel(n) {
     if (n === 1) return 'أسبوع واحد';
     if (n === 2) return 'أسبوعين';
     return `${n} أسابيع`;
-  }
-
-  function arDaysLabel(n) {
-    if (n === 1) return 'يوم واحد';
-    if (n === 2) return 'يومين';
-    return `${n} أيام`;
   }
 
   // Tiered milestone phrases: as the streak climbs past each threshold the
@@ -679,14 +656,6 @@
     { min: 1,  text: n => `🔥 سلسلة ${arWeeksLabel(n)} متتالية` },
     { min: 0,  text: () => 'أكملي هدفك الأسبوعي لتبدئي سلسلتك 🔥' },
   ];
-  const DAY_STREAK_MILESTONES = [
-    { min: 30, text: n => `🏆 شهر كامل من التسجيل اليومي — ${arDaysLabel(n)} متواصلة!` },
-    { min: 14, text: n => `🌟 أسبوعان متواصلان من الانضباط — ${arDaysLabel(n)}` },
-    { min: 7,  text: n => `✨ أسبوع كامل من التسجيل — ${arDaysLabel(n)} متتالية` },
-    { min: 3,  text: n => `📈 بداية قوية — ${arDaysLabel(n)} تسجيل متتالية` },
-    { min: 1,  text: n => `📝 ${arDaysLabel(n)} تسجيل متتالية` },
-    { min: 0,  text: () => 'سجّلي اليوم لتبدئي سلسلة تسجيل يومية 📝' },
-  ];
   function milestonePhrase(milestones, n) {
     return milestones.find(t => n >= t.min).text(n);
   }
@@ -698,12 +667,10 @@
     const goal = state.settings.weeklyWorkoutGoal;
     const pct = Math.min(1, goal ? workoutDays / goal : 0);
     const weekStreak = computeWeeklyStreak();
-    const dayStreak = computeDailyLogStreak();
 
     const r = 34, circumference = 2 * Math.PI * r;
     const offset = circumference * (1 - pct);
     const streakText = milestonePhrase(WEEK_STREAK_MILESTONES, weekStreak);
-    const dayStreakText = milestonePhrase(DAY_STREAK_MILESTONES, dayStreak);
 
     const el = document.getElementById('weeklyWorkoutProgress');
     el.innerHTML = `
@@ -718,7 +685,6 @@
         <div class="streak-info">
           <div class="streak-flame">${streakText}</div>
           <div class="streak-sub">${workoutDays} من ${goal} أيام تمرين هذا الأسبوع</div>
-          <div class="streak-flame streak-flame-secondary">${dayStreakText}</div>
         </div>
       </div>
     `;

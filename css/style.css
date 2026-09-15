@@ -523,7 +523,6 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .streak-info { flex: 1; }
 .streak-flame { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--ink); }
 .streak-sub { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
-.streak-flame-secondary { font-size: 0.85rem; font-weight: 500; margin-top: 8px; color: var(--accent-dark); }
 
 .chart-controls {
   display: flex;
