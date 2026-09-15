@@ -232,6 +232,10 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
 }
 
+.duration-inputs { display: flex; align-items: center; gap: 8px; }
+.duration-inputs input { width: 100%; min-width: 0; text-align: center; }
+.duration-sep { color: var(--muted); font-weight: 600; }
+
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .grid-4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
@@ -246,6 +250,16 @@ input:focus, textarea:focus, select:focus {
 }
 
 .checkbox-field { margin-bottom: 4px; }
+#onPeriodField.period-overdue {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+#onPeriodField.period-overdue #onPeriodLabel {
+  color: var(--warn);
+  font-weight: 700;
+}
 .switch-label {
   display: flex;
   align-items: center;

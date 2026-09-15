@@ -75,8 +75,12 @@
             <input type="text" id="workoutType" placeholder="مثال: صدر وترايسبس">
           </div>
           <div class="field">
-            <label for="workoutDuration">مدة التمرين (دقيقة)</label>
-            <input type="number" id="workoutDuration" min="0" placeholder="مثال: 60">
+            <label>مدة التمرين</label>
+            <div class="duration-inputs">
+              <input type="number" id="workoutDurationHours" min="0" max="23" placeholder="ساعات">
+              <span class="duration-sep">:</span>
+              <input type="number" id="workoutDurationMinutes" min="0" max="59" placeholder="دقائق">
+            </div>
           </div>
           <div class="field span-2">
             <label for="workoutNotes">ملاحظات</label>
@@ -292,6 +296,19 @@
       <div class="field">
         <label for="proteinMarginInput">هامش البروتين (%)</label>
         <input type="number" id="proteinMarginInput" min="0" max="50">
+      </div>
+    </div>
+
+    <div class="settings-section-title">الدورة الشهرية</div>
+    <p class="muted">تُستخدم هذه القيم لتقدير مراحل دورتك حتى تُسجّلي دورتين كاملتين هنا، وبعدها يعتمد التطبيق على متوسط دوراتك الفعلي تلقائيًا.</p>
+    <div class="grid-2">
+      <div class="field">
+        <label for="periodLenInput">مدة الدورة المعتادة (أيام)</label>
+        <input type="number" id="periodLenInput" min="2" max="15">
+      </div>
+      <div class="field">
+        <label for="cycleLenInput">طول الدورة الكاملة (أيام)</label>
+        <input type="number" id="cycleLenInput" min="15" max="60">
       </div>
     </div>
 

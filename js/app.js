@@ -27,7 +27,15 @@
         calorieMarginPct: 5,
         proteinMarginPct: 8,
         goalDirections: Object.fromEntries(MEASURE_FIELDS.map(f => [f.key, f.defaultGoal])),
+        // Known period/cycle length from the user's own tracking history —
+        // used instead of the computed average until enough logged periods
+        // build up their own average (see computeCycleInfo).
+        periodLenOverride: 7,
+        cycleLenOverride: 26,
       },
+      // One-time data-seeding markers so a migration only ever runs once,
+      // even after it syncs to the cloud and reloads elsewhere.
+      seedFlags: {},
     };
   }
 
@@ -48,7 +56,10 @@
         calorieMarginPct: parsed.settings?.calorieMarginPct ?? base.settings.calorieMarginPct,
         proteinMarginPct: parsed.settings?.proteinMarginPct ?? base.settings.proteinMarginPct,
         goalDirections: { ...base.settings.goalDirections, ...(parsed.settings?.goalDirections || {}) },
+        periodLenOverride: parsed.settings?.periodLenOverride ?? base.settings.periodLenOverride,
+        cycleLenOverride: parsed.settings?.cycleLenOverride ?? base.settings.cycleLenOverride,
       },
+      seedFlags: { ...base.seedFlags, ...(parsed.seedFlags || {}) },
     };
   }
 
@@ -119,6 +130,7 @@
       }
       cloudReady = true;
       syncStatus = 'cloud';
+      applyOneTimeSeeds();
       renderAll();
       showToast('☁️ الحفظ السحابي مفعّل — بياناتك محفوظة بأمان');
     } catch (e) {
@@ -130,6 +142,29 @@
       state = normalizeState(snap.data());
       renderAll();
     }, e => console.error('Cloud sync error.', e));
+  }
+
+  // One-time import of the workout streak the user already had in another
+  // tracker before switching here, so her existing streak isn't lost.
+  function applyOneTimeSeeds() {
+    if (state.seedFlags && state.seedFlags.streakSep2026) return;
+    ['2026-09-02', '2026-09-03', '2026-09-06', '2026-09-07', '2026-09-09', '2026-09-12'].forEach(d => {
+      const existing = state.dailyLogs[d] || {};
+      state.dailyLogs[d] = {
+        steps: existing.steps ?? null,
+        calories: existing.calories ?? null,
+        protein: existing.protein ?? null,
+        onPeriod: existing.onPeriod ?? false,
+        workout: {
+          done: true,
+          type: existing.workout?.type || '',
+          duration: existing.workout?.duration ?? null,
+          notes: existing.workout?.notes || '',
+        },
+      };
+    });
+    state.seedFlags = { ...(state.seedFlags || {}), streakSep2026: true };
+    saveState();
   }
 
   /* ============================ HELPERS ============================ */
@@ -207,12 +242,20 @@
     const clusters = getPeriodClusters();
     if (clusters.length === 0) return null;
 
-    const lens = clusters.map(c => daysBetween(c.start, c.end) + 1);
-    let periodLen = Math.round(lens.reduce((a, b) => a + b, 0) / lens.length);
-    periodLen = Math.min(10, Math.max(3, periodLen));
+    // A single logged period isn't enough to average from, so fall back to
+    // the length the user already knows from tracking elsewhere (set in
+    // الإعدادات) until she's logged enough cycles here for her own average.
+    let periodLen;
+    if (clusters.length >= 2) {
+      const lens = clusters.map(c => daysBetween(c.start, c.end) + 1);
+      periodLen = Math.round(lens.reduce((a, b) => a + b, 0) / lens.length);
+      periodLen = Math.min(10, Math.max(3, periodLen));
+    } else {
+      periodLen = state.settings.periodLenOverride || Math.min(10, Math.max(3, daysBetween(clusters[0].start, clusters[0].end) + 1));
+    }
 
     const starts = clusters.map(c => c.start);
-    let cycleLen = 28;
+    let cycleLen = state.settings.cycleLenOverride || 28;
     if (starts.length >= 2) {
       const gaps = [];
       for (let i = 1; i < starts.length; i++) gaps.push(daysBetween(starts[i - 1], starts[i]));
@@ -421,9 +464,7 @@
   });
 
   onPeriodInput.addEventListener('change', () => {
-    document.getElementById('onPeriodLabel').textContent = onPeriodInput.checked
-      ? '🩸 دورتك مستمرة — اضغطي هنا إذا انتهت اليوم'
-      : '🩸 على الدورة اليوم؟';
+    updatePeriodFieldUI(dailyDateInput.value);
   });
 
   dailyDateInput.addEventListener('change', loadDailyFormForDate);
@@ -452,7 +493,9 @@
     workoutDoneInput.checked = !!w?.done;
     workoutDetails.classList.toggle('hidden', !w?.done);
     document.getElementById('workoutType').value = w?.type ?? '';
-    document.getElementById('workoutDuration').value = w?.duration ?? '';
+    const totalMin = w?.duration ?? null;
+    document.getElementById('workoutDurationHours').value = totalMin !== null ? Math.floor(totalMin / 60) : '';
+    document.getElementById('workoutDurationMinutes').value = totalMin !== null ? totalMin % 60 : '';
     document.getElementById('workoutNotes').value = w?.notes ?? '';
     // A day with no saved entry yet inherits the previous day's period
     // state, so marking "on period" once carries forward automatically
@@ -479,10 +522,24 @@
     // over" to it — onPeriodInput.checked is the ground truth for "currently
     // on period" and always keeps the field visible regardless.
     const relevant = !info || info.phase === 'menstrual' || info.daysUntilNextPeriod <= 3 || onPeriodInput.checked;
-    document.getElementById('onPeriodField').classList.toggle('hidden', !relevant);
-    document.getElementById('onPeriodLabel').textContent = onPeriodInput.checked
-      ? '🩸 دورتك مستمرة — اضغطي هنا إذا انتهت اليوم'
-      : '🩸 على الدورة اليوم؟';
+    const field = document.getElementById('onPeriodField');
+    field.classList.toggle('hidden', !relevant);
+
+    // info.cycleDay counts calendar days since the period's saved start
+    // regardless of whether the in-between days were saved yet, so once it
+    // runs past the usual period length while still checked, surface a
+    // pointed "did it end?" prompt instead of the quiet everyday wording.
+    const overdue = !!(onPeriodInput.checked && info && info.cycleDay > info.periodLen);
+    field.classList.toggle('period-overdue', overdue);
+
+    const label = document.getElementById('onPeriodLabel');
+    if (!onPeriodInput.checked) {
+      label.textContent = '🩸 على الدورة اليوم؟';
+    } else if (overdue) {
+      label.textContent = `⚠️ مرّ ${info.cycleDay} أيام — هل انتهت دورتك؟ اضغطي هنا لإنهائها`;
+    } else {
+      label.textContent = '🩸 دورتك مستمرة — اضغطي هنا إذا انتهت اليوم';
+    }
   }
 
   const AR_DAY_NAMES = ['سبت', 'أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
@@ -528,7 +585,7 @@
         workout: {
           done: workoutDoneInput.checked,
           type: document.getElementById('workoutType').value.trim(),
-          duration: numOrNull(document.getElementById('workoutDuration').value),
+          duration: readWorkoutDurationMinutes(),
           notes: document.getElementById('workoutNotes').value.trim(),
         },
         onPeriod: onPeriodInput.checked,
@@ -542,10 +599,35 @@
     }
   });
 
+  function readWorkoutDurationMinutes() {
+    const h = numOrNull(document.getElementById('workoutDurationHours').value);
+    const m = numOrNull(document.getElementById('workoutDurationMinutes').value);
+    if (h === null && m === null) return null;
+    return (h || 0) * 60 + (m || 0);
+  }
+
+  function formatDuration(totalMin) {
+    if (totalMin === null || totalMin === undefined) return null;
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h && m) return `${h}س ${m}د`;
+    if (h) return `${h}س`;
+    return `${m}د`;
+  }
+
   function numOrNull(v) {
     if (v === '' || v === null || v === undefined) return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
+  }
+
+  function editDailyLog(date) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'today'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-today'));
+    dailyDateInput.value = date;
+    loadDailyFormForDate();
+    document.getElementById('dailyForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('عدّلي بيانات يوم ' + formatDateAr(date) + ' واحفظي.');
   }
 
   function deleteDailyLog(date) {
@@ -661,7 +743,7 @@
     tbody.innerHTML = dates.map(d => {
       const e = state.dailyLogs[d];
       const w = e.workout;
-      const details = w?.done ? [w.type, w.duration ? `${w.duration} دقيقة` : null, w.notes].filter(Boolean).join(' · ') : '—';
+      const details = w?.done ? [w.type, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
       return `<tr>
         <td>${formatDateAr(d)}</td>
         <td>${e.steps ?? '—'}</td>
@@ -669,12 +751,13 @@
         <td>${proteinCellHtml(e.protein)}</td>
         <td>${w?.done ? '✅' : '—'}</td>
         <td>${details}</td>
-        <td><button class="btn-icon-small" data-del="${d}" title="حذف">🗑️</button></td>
+        <td class="row-actions">
+          <button class="btn-icon-small" data-edit="${d}" title="تعديل">✏️</button>
+          <button class="btn-icon-small" data-del="${d}" title="حذف">🗑️</button>
+        </td>
       </tr>`;
     }).join('') || `<tr><td colspan="7" class="muted">لا توجد بيانات بعد</td></tr>`;
-    tbody.querySelectorAll('[data-del]').forEach(btn => {
-      btn.addEventListener('click', () => deleteDailyLog(btn.dataset.del));
-    });
+    attachRowHandlers(tbody);
   }
 
   function rowHtml(d) {
@@ -685,13 +768,19 @@
       <td>${calorieCellHtml(e.calories)}</td>
       <td>${proteinCellHtml(e.protein)}</td>
       <td>${e.workout?.done ? '✅' : '—'}</td>
-      <td><button class="btn-icon-small" data-del="${d}" title="حذف">🗑️</button></td>
+      <td class="row-actions">
+        <button class="btn-icon-small" data-edit="${d}" title="تعديل">✏️</button>
+        <button class="btn-icon-small" data-del="${d}" title="حذف">🗑️</button>
+      </td>
     </tr>`;
   }
 
   function attachRowHandlers(tbody) {
     tbody.querySelectorAll('[data-del]').forEach(btn => {
       btn.addEventListener('click', () => deleteDailyLog(btn.dataset.del));
+    });
+    tbody.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => editDailyLog(btn.dataset.edit));
     });
   }
 
@@ -1104,6 +1193,8 @@
     document.getElementById('calorieMarginInput').value = state.settings.calorieMarginPct;
     document.getElementById('proteinGoalInput').value = state.settings.proteinGoal;
     document.getElementById('proteinMarginInput').value = state.settings.proteinMarginPct;
+    document.getElementById('periodLenInput').value = state.settings.periodLenOverride ?? '';
+    document.getElementById('cycleLenInput').value = state.settings.cycleLenOverride ?? '';
     const el = document.getElementById('goalDirections');
     el.innerHTML = MEASURE_FIELDS.map(f => `
       <div class="goal-direction-row">
@@ -1124,6 +1215,10 @@
     state.settings.proteinGoal = Number(document.getElementById('proteinGoalInput').value) || state.settings.proteinGoal;
     state.settings.calorieMarginPct = Math.max(0, Number(document.getElementById('calorieMarginInput').value) || 0);
     state.settings.proteinMarginPct = Math.max(0, Number(document.getElementById('proteinMarginInput').value) || 0);
+    const periodLenVal = numOrNull(document.getElementById('periodLenInput').value);
+    state.settings.periodLenOverride = periodLenVal ? Math.min(15, Math.max(2, periodLenVal)) : null;
+    const cycleLenVal = numOrNull(document.getElementById('cycleLenInput').value);
+    state.settings.cycleLenOverride = cycleLenVal ? Math.min(60, Math.max(15, cycleLenVal)) : null;
     document.querySelectorAll('#goalDirections [data-goal]').forEach(sel => {
       state.settings.goalDirections[sel.dataset.goal] = sel.value;
     });
@@ -1161,7 +1256,10 @@
               calorieMarginPct: parsed.settings?.calorieMarginPct ?? base.settings.calorieMarginPct,
               proteinMarginPct: parsed.settings?.proteinMarginPct ?? base.settings.proteinMarginPct,
               goalDirections: { ...base.settings.goalDirections, ...(parsed.settings?.goalDirections || {}) },
+              periodLenOverride: parsed.settings?.periodLenOverride ?? base.settings.periodLenOverride,
+              cycleLenOverride: parsed.settings?.cycleLenOverride ?? base.settings.cycleLenOverride,
             },
+            seedFlags: { ...base.seedFlags, ...(parsed.seedFlags || {}) },
           };
           saveState();
           renderAll();
@@ -1320,6 +1418,7 @@
     renderChart();
   }
 
+  applyOneTimeSeeds();
   renderAll();
   initCloudSync();
   initAssistant();
