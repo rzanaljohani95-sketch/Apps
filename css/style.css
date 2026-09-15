@@ -444,7 +444,7 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 }
 .goal-direction-row select { padding: 6px 8px; font-size: 0.85rem; }
 
-#confirmMessage { margin: 0 0 4px; font-size: 0.95rem; }
+#confirmMessage { margin: 0 0 4px; font-size: 0.95rem; white-space: pre-wrap; }
 
 .sync-status {
   font-size: 0.82rem;
@@ -537,3 +537,83 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
   max-width: 90vw;
   text-align: center;
 }
+
+/* ---------- menstrual cycle tracking ---------- */
+
+.cycle-phase-badge {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.cycle-phase-icon { font-size: 1.9rem; line-height: 1; }
+.cycle-phase-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--accent-dark);
+}
+.cycle-phase-tip { font-size: 0.85rem; color: var(--ink); margin-top: 4px; line-height: 1.6; }
+.cycle-note { font-size: 0.82rem; margin: 6px 0 0; }
+.cycle-disclaimer { font-size: 0.72rem; margin: 8px 0 0; }
+
+/* ---------- measurement guide ---------- */
+
+details > summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--ink);
+  list-style: none;
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary::after {
+  content: "▾";
+  float: left;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+details[open] > summary::after { transform: rotate(180deg); }
+
+.measure-guide {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.measure-guide-svg { width: 150px; flex-shrink: 0; }
+.measure-guide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 200px;
+}
+.measure-guide-list li { display: flex; gap: 10px; align-items: flex-start; font-size: 0.85rem; line-height: 1.5; }
+.guide-num {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- measurement table sorting / row actions ---------- */
+
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--accent-dark); }
+.row-actions { display: flex; gap: 4px; justify-content: center; }

@@ -172,6 +172,97 @@
     return Math.round(n * 10) / 10;
   }
 
+  /* ---------- menstrual cycle tracking (simple estimate, not medical advice) ---------- */
+
+  const CYCLE_PHASES = {
+    menstrual: { icon: '🩸', label: 'الدورة الشهرية', tip: 'قد ينخفض مستوى الطاقة هذه الأيام — خففي شدة التمرين حسب راحتك، واهتمي بالراحة والبروتين.' },
+    follicular: { icon: '🌱', label: 'المرحلة الجريبية', tip: 'الطاقة ترتفع تدريجيًا — وقت مناسب لزيادة شدة التمارين تدريجيًا.' },
+    ovulation: { icon: '🥚', label: 'الإباضة', tip: 'عادة ما تكون ذروة الطاقة والأداء البدني — وقت جيد للتمارين عالية الشدة إن رغبتِ.' },
+    luteal: { icon: '🌗', label: 'المرحلة الأصفرية', tip: 'قد يزيد الشعور بالتعب أو الرغبة الغذائية قرب نهاية المرحلة — راقبي جسمك وعدّلي حسب حاجتك.' },
+  };
+  const BLOAT_PRONE_FIELDS = ['waist', 'lowerBelly', 'hips', 'weight'];
+
+  function daysBetween(d1, d2) {
+    return Math.round((new Date(d2 + 'T00:00:00') - new Date(d1 + 'T00:00:00')) / 86400000);
+  }
+
+  function getPeriodClusters() {
+    const periodDates = Object.keys(state.dailyLogs).filter(d => state.dailyLogs[d].onPeriod).sort();
+    const clusters = [];
+    let clusterStart = null, prev = null;
+    periodDates.forEach(d => {
+      if (!clusterStart) {
+        clusterStart = d;
+      } else if (daysBetween(prev, d) > 1) {
+        clusters.push({ start: clusterStart, end: prev });
+        clusterStart = d;
+      }
+      prev = d;
+    });
+    if (clusterStart) clusters.push({ start: clusterStart, end: prev });
+    return clusters;
+  }
+
+  function computeCycleInfo(forDate) {
+    const clusters = getPeriodClusters();
+    if (clusters.length === 0) return null;
+
+    const lens = clusters.map(c => daysBetween(c.start, c.end) + 1);
+    let periodLen = Math.round(lens.reduce((a, b) => a + b, 0) / lens.length);
+    periodLen = Math.min(10, Math.max(3, periodLen));
+
+    const starts = clusters.map(c => c.start);
+    let cycleLen = 28;
+    if (starts.length >= 2) {
+      const gaps = [];
+      for (let i = 1; i < starts.length; i++) gaps.push(daysBetween(starts[i - 1], starts[i]));
+      cycleLen = Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length);
+      cycleLen = Math.min(35, Math.max(21, cycleLen));
+    }
+
+    // Use the latest period start on or before forDate — a future-dated
+    // log entry (wrong date picked by mistake) should never make forDate
+    // look like it precedes its own cycle.
+    const priorStarts = starts.filter(s => s <= forDate);
+    const lastStart = priorStarts.length ? priorStarts[priorStarts.length - 1] : starts[0];
+    const daysSinceStart = daysBetween(lastStart, forDate);
+    const cycleDay = daysSinceStart + 1;
+    const daysUntilNextPeriod = cycleLen - daysSinceStart;
+
+    const ovulationDay = Math.max(periodLen + 2, cycleLen - 14);
+    let phase;
+    if (cycleDay <= periodLen) phase = 'menstrual';
+    else if (cycleDay <= ovulationDay - 2) phase = 'follicular';
+    else if (cycleDay <= ovulationDay + 1) phase = 'ovulation';
+    else phase = 'luteal';
+
+    return { cycleDay, cycleLen, periodLen, phase, daysUntilNextPeriod, lastStart };
+  }
+
+  function renderCycleCard() {
+    const card = document.getElementById('cycleCard');
+    const info = computeCycleInfo(todayStr());
+    if (!info) {
+      card.innerHTML = `<p class="muted">فعّلي هذه الميزة بتسجيل أيام دورتك من خانة "🩸 على الدورة اليوم؟" في تسجيل اليوم، وسأحسب لك المراحل تلقائيًا بعد ذلك.</p>`;
+      return;
+    }
+    const phaseInfo = CYCLE_PHASES[info.phase];
+    const overdueNote = info.daysUntilNextPeriod <= 0
+      ? `<p class="muted cycle-note">⚠️ تجاوزتِ الموعد المتوقع بنحو ${Math.abs(info.daysUntilNextPeriod)} يوم — الحساب تقديري ويتحسّن مع تسجيل المزيد من الدورات.</p>`
+      : `<p class="muted cycle-note">الدورة القادمة متوقعة خلال ${info.daysUntilNextPeriod} يوم تقريبًا (تقدير).</p>`;
+    card.innerHTML = `
+      <div class="cycle-phase-badge">
+        <span class="cycle-phase-icon">${phaseInfo.icon}</span>
+        <div>
+          <div class="cycle-phase-name">${phaseInfo.label} — اليوم ${info.cycleDay} من الدورة</div>
+          <div class="cycle-phase-tip">${phaseInfo.tip}</div>
+        </div>
+      </div>
+      ${overdueNote}
+      <p class="muted cycle-disclaimer">تقدير تقريبي بناءً على الأيام التي سجّلتِها، وليس بديلاً عن استشارة طبية.</p>
+    `;
+  }
+
   /* ---------- in-page confirm/toast (native confirm()/alert() are blocked in some mobile app views) ---------- */
 
   function showConfirm(message, onYes) {
@@ -246,6 +337,7 @@
   const dailyDateInput = document.getElementById('dailyDate');
   const workoutDoneInput = document.getElementById('workoutDone');
   const workoutDetails = document.getElementById('workoutDetails');
+  const onPeriodInput = document.getElementById('onPeriod');
 
   dailyDateInput.value = todayStr();
 
@@ -281,6 +373,7 @@
     document.getElementById('workoutType').value = w?.type ?? '';
     document.getElementById('workoutDuration').value = w?.duration ?? '';
     document.getElementById('workoutNotes').value = w?.notes ?? '';
+    onPeriodInput.checked = !!entry?.onPeriod;
     updateDailyGoalBadges();
   }
 
@@ -299,6 +392,7 @@
           duration: numOrNull(document.getElementById('workoutDuration').value),
           notes: document.getElementById('workoutNotes').value.trim(),
         },
+        onPeriod: onPeriodInput.checked,
       };
       saveState();
       renderAll();
@@ -431,22 +525,124 @@
 
   document.getElementById('measureDate').value = todayStr();
 
+  let editingMeasurementId = null;
+
+  // Flags a measurement that jumped an unusual amount from the last one on
+  // record, so a typo doesn't quietly distort the chart. Excludes `excludeId`
+  // so editing an entry doesn't compare it against itself.
+  function findSuspiciousFields(newEntry, excludeId) {
+    const prior = [...state.measurements]
+      .filter(m => m.id !== excludeId && m.date <= newEntry.date)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .pop();
+    if (!prior) return [];
+
+    const cycleInfo = computeCycleInfo(newEntry.date);
+    const premenstrualWindow = !!cycleInfo && cycleInfo.phase === 'luteal' &&
+      cycleInfo.daysUntilNextPeriod >= 1 && cycleInfo.daysUntilNextPeriod <= 7;
+
+    const suspicious = [];
+    MEASURE_FIELDS.forEach(f => {
+      const oldV = prior[f.key], newV = newEntry[f.key];
+      if (oldV === null || oldV === undefined || newV === null || newV === undefined || oldV === 0) return;
+      const relChange = (newV - oldV) / oldV;
+      if (Math.abs(relChange) <= 0.15) return;
+      const possiblyBloat = premenstrualWindow && BLOAT_PRONE_FIELDS.includes(f.key) && relChange > 0 && relChange <= 0.25;
+      suspicious.push({ label: f.label, unit: f.unit, oldV, newV, possiblyBloat });
+    });
+    return suspicious;
+  }
+
+  function buildSuspiciousMessage(suspicious) {
+    const allBloat = suspicious.every(s => s.possiblyBloat);
+    const lines = suspicious.map(s => {
+      const arrow = s.newV > s.oldV ? '↑' : '↓';
+      const note = s.possiblyBloat ? ' (قد يكون طبيعيًا بسبب اقتراب الدورة الشهرية)' : '';
+      return `• ${s.label}: ${s.oldV} ${arrow} ${s.newV} ${s.unit}${note}`;
+    }).join('\n');
+    const heading = allBloat
+      ? '💧 بعض القياسات ارتفعت أكثر من المعتاد، وهذا شائع في الأيام التي تسبق الدورة الشهرية بسبب احتباس الماء:'
+      : '⚠️ بعض القياسات تبدو مختلفة كثيرًا عن آخر قياس مسجّل، وقد تكون خطأ بالإدخال:';
+    return `${heading}\n\n${lines}\n\nتأكّدي من صحة الأرقام — احفظي إن كانت صحيحة، أو ألغي لإعادة القياس.`;
+  }
+
+  function readMeasureFormValues() {
+    const values = {};
+    MEASURE_FIELDS.forEach(f => {
+      const input = document.getElementById(`m_${f.key}`);
+      values[f.key] = input ? numOrNull(input.value) : null;
+    });
+    return values;
+  }
+
+  function clearMeasureForm() {
+    MEASURE_FIELDS.forEach(f => {
+      const input = document.getElementById(`m_${f.key}`);
+      if (input) input.value = '';
+    });
+    document.getElementById('measureDate').value = todayStr();
+  }
+
+  function startEditMeasurement(id) {
+    const m = state.measurements.find(x => x.id === id);
+    if (!m) return;
+    editingMeasurementId = id;
+    document.getElementById('measureDate').value = m.date;
+    MEASURE_FIELDS.forEach(f => {
+      const input = document.getElementById(`m_${f.key}`);
+      if (input) input.value = m[f.key] ?? '';
+    });
+    document.getElementById('measureSaveBtn').textContent = '💾 حفظ التعديلات';
+    document.getElementById('measureCancelEditBtn').classList.remove('hidden');
+    document.getElementById('measureForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('وضع التعديل مفعّل — عدّلي القيم واحفظي.');
+  }
+
+  function cancelEditMeasurement() {
+    editingMeasurementId = null;
+    document.getElementById('measureSaveBtn').textContent = 'حفظ القياسات';
+    document.getElementById('measureCancelEditBtn').classList.add('hidden');
+    clearMeasureForm();
+  }
+
+  document.getElementById('measureCancelEditBtn').addEventListener('click', cancelEditMeasurement);
+
   document.getElementById('measureSaveBtn').addEventListener('click', () => {
     try {
       const date = document.getElementById('measureDate').value;
       if (!date) { showToast('اختر تاريخ القياس أولًا.'); return; }
-      const entry = { id: `${date}-${Date.now()}`, date };
-      MEASURE_FIELDS.forEach(f => {
-        const input = document.getElementById(`m_${f.key}`);
-        entry[f.key] = input ? numOrNull(input.value) : null;
-        if (input) input.value = '';
-      });
-      state.measurements.push(entry);
-      state.measurements.sort((a, b) => a.date.localeCompare(b.date));
-      saveState();
-      document.getElementById('measureDate').value = todayStr();
-      renderAll();
-      showToast('تم حفظ القياسات.');
+      const values = readMeasureFormValues();
+
+      if (editingMeasurementId) {
+        const existing = state.measurements.find(m => m.id === editingMeasurementId);
+        if (!existing) { cancelEditMeasurement(); showToast('تعذّر إيجاد القياس، حاولي من جديد.'); return; }
+        const candidate = { ...existing, date, ...values };
+        const suspicious = findSuspiciousFields(candidate, editingMeasurementId);
+        const proceed = () => {
+          Object.assign(existing, { date, ...values });
+          state.measurements.sort((a, b) => a.date.localeCompare(b.date));
+          saveState();
+          cancelEditMeasurement();
+          renderAll();
+          showToast('تم تحديث القياس.');
+        };
+        if (suspicious.length) showConfirm(buildSuspiciousMessage(suspicious), proceed);
+        else proceed();
+        return;
+      }
+
+      const entry = { id: `${date}-${Date.now()}`, date, ...values };
+      const suspicious = findSuspiciousFields(entry);
+      const proceed = () => {
+        clearMeasureForm();
+        state.measurements.push(entry);
+        state.measurements.sort((a, b) => a.date.localeCompare(b.date));
+        saveState();
+        renderAll();
+        showToast('تم حفظ القياسات.');
+      };
+      if (suspicious.length) showConfirm(buildSuspiciousMessage(suspicious), proceed);
+      else proceed();
     } catch (err) {
       console.error('Measurement save failed:', err);
       showToast('⚠️ فشل الحفظ: ' + (err && err.message ? err.message : String(err)), 8000);
@@ -456,28 +652,60 @@
   function deleteMeasurement(id) {
     showConfirm('حذف هذا القياس؟', () => {
       state.measurements = state.measurements.filter(m => m.id !== id);
+      if (id === editingMeasurementId) cancelEditMeasurement();
       saveState();
       renderAll();
       showToast('تم الحذف.');
     });
   }
 
+  let measureSortKey = 'date';
+  let measureSortDir = 'desc';
+
   function renderMeasureTable() {
     const head = document.getElementById('measureTableHead');
-    head.innerHTML = `<th>التاريخ</th>` + MEASURE_FIELDS.map(f => `<th>${f.label}</th>`).join('') + `<th></th>`;
+    const arrowFor = key => measureSortKey === key ? (measureSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    head.innerHTML = `<th class="sortable" data-sort="date">التاريخ${arrowFor('date')}</th>` +
+      MEASURE_FIELDS.map(f => `<th class="sortable" data-sort="${f.key}">${f.label}${arrowFor(f.key)}</th>`).join('') +
+      `<th></th>`;
+    head.querySelectorAll('[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (measureSortKey === key) {
+          measureSortDir = measureSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          measureSortKey = key;
+          measureSortDir = key === 'date' ? 'desc' : 'asc';
+        }
+        renderMeasureTable();
+      });
+    });
 
     const tbody = document.querySelector('#measureTable tbody');
-    const rows = [...state.measurements].sort((a, b) => b.date.localeCompare(a.date));
+    const rows = [...state.measurements].sort((a, b) => {
+      const av = a[measureSortKey], bv = b[measureSortKey];
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
+      if (av < bv) return measureSortDir === 'asc' ? -1 : 1;
+      if (av > bv) return measureSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
     tbody.innerHTML = rows.map(m => `
       <tr>
         <td>${formatDateAr(m.date)}</td>
         ${MEASURE_FIELDS.map(f => `<td>${m[f.key] ?? '—'}</td>`).join('')}
-        <td><button class="btn-icon-small" data-del="${m.id}" title="حذف">🗑️</button></td>
+        <td class="row-actions">
+          <button class="btn-icon-small" data-edit="${m.id}" title="تعديل">✏️</button>
+          <button class="btn-icon-small" data-del="${m.id}" title="حذف">🗑️</button>
+        </td>
       </tr>
     `).join('') || `<tr><td colspan="${MEASURE_FIELDS.length + 2}" class="muted">لا توجد قياسات بعد</td></tr>`;
 
     tbody.querySelectorAll('[data-del]').forEach(btn => {
       btn.addEventListener('click', () => deleteMeasurement(btn.dataset.del));
+    });
+    tbody.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => startEditMeasurement(btn.dataset.edit));
     });
   }
 
@@ -773,8 +1001,9 @@
 
   const ASSISTANT_RULES =
     'أنت مساعد صحي ولياقة بدنية شخصي داخل تطبيق متابعة يستخدمه شخص واحد. ' +
-    'أمامك بيانات المستخدم الفعلية بصيغة JSON (آخر 14 يومًا من سجله اليومي، وآخر قياساته، وأهدافه). ' +
+    'أمامك بيانات المستخدم الفعلية بصيغة JSON (آخر 14 يومًا من سجله اليومي، وآخر قياساته، وأهدافه، ومرحلة دورته الشهرية الحالية إن وُجدت في currentCyclePhase). ' +
     'اعتمد فقط على هذه الأرقام — لا تخترع بيانات غير موجودة، ولا تقدّم نصائح طبية عامة لا علاقة لها بالأرقام المعطاة. ' +
+    'إذا توفّرت currentCyclePhase، خذها بعين الاعتبار عند الحديث عن الطاقة أو الأداء أو الشهية (مثلًا: طاقة أقل بمرحلة الدورة، أو رغبة غذائية أعلى بالمرحلة الأصفرية) دون المبالغة أو تقديم تشخيص طبي. ' +
     'إن سُئلت عن شيء خارج بيانات اللياقة/الصحة المتاحة هنا، وضّح بأدب أنك مخصص لتحليل بيانات هذا التطبيق فقط. ' +
     'أجب بالعربية الفصحى المبسطة، بإيجاز ووضوح.';
 
@@ -784,6 +1013,7 @@
     const recentMeasurements = [...state.measurements]
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(-6);
+    const cycleInfo = computeCycleInfo(todayStr());
     return {
       today: todayStr(),
       goals: {
@@ -796,6 +1026,7 @@
       measurementGoalDirections: state.settings.goalDirections,
       dailyLogsLast14Days,
       recentMeasurements,
+      currentCyclePhase: cycleInfo ? { phase: cycleInfo.phase, cycleDay: cycleInfo.cycleDay, daysUntilNextPeriod: cycleInfo.daysUntilNextPeriod } : null,
     };
   }
 
@@ -928,6 +1159,7 @@
 
   function renderAll() {
     loadDailyFormForDate();
+    renderCycleCard();
     renderWeeklyProgress();
     renderRecentDailyTable();
     renderFullDailyTable();

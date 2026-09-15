@@ -55,6 +55,13 @@
           </label>
         </div>
 
+        <div class="field checkbox-field">
+          <label class="switch-label">
+            <input type="checkbox" id="onPeriod">
+            <span>🩸 على الدورة اليوم؟</span>
+          </label>
+        </div>
+
         <div id="workoutDetails" class="grid-2 hidden">
           <div class="field">
             <label for="workoutType">نوع التمرين</label>
@@ -72,6 +79,11 @@
 
         <button type="button" id="dailySaveBtn" class="btn-primary">حفظ اليوم</button>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>🌙 مراحل الدورة</h2>
+      <div id="cycleCard"></div>
     </div>
 
     <div class="card">
@@ -111,8 +123,68 @@
           <input type="date" id="measureDate">
         </div>
         <div class="grid-4" id="measureFields"></div>
-        <button type="button" id="measureSaveBtn" class="btn-primary">حفظ القياسات</button>
+        <div class="modal-actions">
+          <button type="button" id="measureSaveBtn" class="btn-primary">حفظ القياسات</button>
+          <button type="button" id="measureCancelEditBtn" class="btn-secondary hidden">إلغاء التعديل</button>
+        </div>
       </div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>📍 كيف أقيس بشكل صحيح؟</summary>
+        <div class="measure-guide">
+          <svg class="measure-guide-svg" viewBox="0 0 240 380" role="img" aria-label="رسم توضيحي لأماكن قياس الجسم">
+            <ellipse cx="120" cy="28" rx="17" ry="19" style="fill:var(--surface-2)"/>
+            <rect x="112" y="45" width="16" height="14" rx="4" style="fill:var(--surface-2)"/>
+            <rect x="68" y="58" width="104" height="54" rx="26" style="fill:var(--surface-2)"/>
+            <rect x="87" y="103" width="66" height="32" rx="16" style="fill:var(--surface-2)"/>
+            <rect x="74" y="126" width="92" height="42" rx="21" style="fill:var(--surface-2)"/>
+            <rect x="38" y="64" width="27" height="116" rx="13.5" style="fill:var(--surface-2)"/>
+            <rect x="175" y="64" width="27" height="116" rx="13.5" style="fill:var(--surface-2)"/>
+            <rect x="78" y="165" width="35" height="90" rx="17" style="fill:var(--surface-2)"/>
+            <rect x="127" y="165" width="35" height="90" rx="17" style="fill:var(--surface-2)"/>
+            <rect x="82" y="252" width="27" height="90" rx="13.5" style="fill:var(--surface-2)"/>
+            <rect x="131" y="252" width="27" height="90" rx="13.5" style="fill:var(--surface-2)"/>
+
+            <g style="stroke:var(--accent);stroke-width:2;stroke-dasharray:4 3">
+              <line x1="64" y1="84" x2="176" y2="84"/>
+              <line x1="176" y1="100" x2="201" y2="100"/>
+              <line x1="83" y1="122" x2="157" y2="122"/>
+              <line x1="78" y1="144" x2="162" y2="144"/>
+              <line x1="72" y1="166" x2="168" y2="166"/>
+              <line x1="129" y1="198" x2="160" y2="198"/>
+              <line x1="133" y1="300" x2="156" y2="300"/>
+            </g>
+
+            <g style="font-family:'IBM Plex Sans Arabic',sans-serif;font-size:10px;font-weight:700;fill:#fff">
+              <circle cx="186" cy="84" r="9" style="fill:var(--accent)"/>
+              <text x="186" y="84" text-anchor="middle" dy="0.35em">1</text>
+              <circle cx="211" cy="100" r="9" style="fill:var(--accent)"/>
+              <text x="211" y="100" text-anchor="middle" dy="0.35em">2</text>
+              <circle cx="167" cy="122" r="9" style="fill:var(--accent)"/>
+              <text x="167" y="122" text-anchor="middle" dy="0.35em">3</text>
+              <circle cx="172" cy="144" r="9" style="fill:var(--accent)"/>
+              <text x="172" y="144" text-anchor="middle" dy="0.35em">4</text>
+              <circle cx="178" cy="166" r="9" style="fill:var(--accent)"/>
+              <text x="178" y="166" text-anchor="middle" dy="0.35em">5</text>
+              <circle cx="170" cy="198" r="9" style="fill:var(--accent)"/>
+              <text x="170" y="198" text-anchor="middle" dy="0.35em">6</text>
+              <circle cx="166" cy="300" r="9" style="fill:var(--accent)"/>
+              <text x="166" y="300" text-anchor="middle" dy="0.35em">7</text>
+            </g>
+          </svg>
+          <ol class="measure-guide-list">
+            <li><span class="guide-num">1</span><div><strong>الصدر</strong> — حول أوسع نقطة في الصدر، والشريط أفقي بالكامل</div></li>
+            <li><span class="guide-num">2</span><div><strong>الزند</strong> — حول أكبر نقطة في العضلة، والذراع مسترخية</div></li>
+            <li><span class="guide-num">3</span><div><strong>الخصر</strong> — حول أضيق نقطة فوق السرة مباشرة</div></li>
+            <li><span class="guide-num">4</span><div><strong>أسفل البطن</strong> — حول أعرض نقطة أسفل السرة</div></li>
+            <li><span class="guide-num">5</span><div><strong>محيط الأرداف</strong> — حول أبرز نقطة في الأرداف</div></li>
+            <li><span class="guide-num">6</span><div><strong>الفخذ</strong> — حول أعلى الفخذ، تحت الأرداف مباشرة</div></li>
+            <li><span class="guide-num">7</span><div><strong>البطات</strong> — حول أوسع نقطة في بطة الساق</div></li>
+          </ol>
+        </div>
+      </details>
     </div>
 
     <div class="card">
