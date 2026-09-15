@@ -375,6 +375,38 @@
     document.getElementById('workoutNotes').value = w?.notes ?? '';
     onPeriodInput.checked = !!entry?.onPeriod;
     updateDailyGoalBadges();
+    renderWeekCalendar();
+  }
+
+  const AR_DAY_NAMES = ['سبت', 'أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
+
+  function renderWeekCalendar() {
+    const container = document.getElementById('weekCalendar');
+    const ws = weekStart(new Date());
+    const selected = dailyDateInput.value;
+    const today = todayStr();
+    let html = '';
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(ws);
+      d.setDate(d.getDate() + i);
+      const dStr = toDateStr(d);
+      const done = !!state.dailyLogs[dStr]?.workout?.done;
+      const cls = ['week-cal-day'];
+      if (dStr === selected) cls.push('selected');
+      if (dStr === today) cls.push('today');
+      html += `<div class="${cls.join(' ')}" data-date="${dStr}">
+        <span class="wcd-name">${AR_DAY_NAMES[i].slice(0, 2)}</span>
+        <span class="wcd-num">${d.getDate()}</span>
+        ${done ? '<span class="wcd-dot"></span>' : ''}
+      </div>`;
+    }
+    container.innerHTML = html;
+    container.querySelectorAll('[data-date]').forEach(el => {
+      el.addEventListener('click', () => {
+        dailyDateInput.value = el.dataset.date;
+        loadDailyFormForDate();
+      });
+    });
   }
 
   document.getElementById('dailySaveBtn').addEventListener('click', () => {
@@ -420,17 +452,60 @@
 
   /* ---------- weekly workout progress + weekly stats ---------- */
 
+  function computeWeeklyStreak() {
+    let streak = 0;
+    let cursor = weekStart(new Date());
+    for (let i = 0; i < 52; i++) {
+      const we = new Date(cursor);
+      we.setDate(we.getDate() + 6);
+      const datesInWeek = Object.keys(state.dailyLogs).filter(d => {
+        const dd = new Date(d + 'T00:00:00');
+        return dd >= cursor && dd <= we;
+      });
+      const doneCount = datesInWeek.filter(d => state.dailyLogs[d].workout?.done).length;
+      if (doneCount < state.settings.weeklyWorkoutGoal) break;
+      streak++;
+      cursor = new Date(cursor);
+      cursor.setDate(cursor.getDate() - 7);
+    }
+    return streak;
+  }
+
+  function arWeeksLabel(n) {
+    if (n === 1) return 'أسبوع واحد';
+    if (n === 2) return 'أسبوعين';
+    return `${n} أسابيع`;
+  }
+
   function renderWeeklyProgress() {
     const now = new Date();
     const dates = Object.keys(state.dailyLogs).filter(d => inSameWeek(d, now));
     const workoutDays = dates.filter(d => state.dailyLogs[d].workout?.done).length;
     const goal = state.settings.weeklyWorkoutGoal;
-    const pct = Math.min(100, Math.round((workoutDays / goal) * 100));
+    const pct = Math.min(1, goal ? workoutDays / goal : 0);
+    const streak = computeWeeklyStreak();
+
+    const r = 34, circumference = 2 * Math.PI * r;
+    const offset = circumference * (1 - pct);
+    const streakText = streak === 0
+      ? 'أكملي هدفك الأسبوعي لتبدئي سلسلتك 🔥'
+      : `🔥 سلسلة ${arWeeksLabel(streak)} متتالية`;
 
     const el = document.getElementById('weeklyWorkoutProgress');
     el.innerHTML = `
-      <div class="progress-label">أيام التمرين هذا الأسبوع: <strong>${workoutDays} / ${goal}</strong></div>
-      <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      <div class="streak-row">
+        <div class="streak-ring-wrap">
+          <svg viewBox="0 0 84 84">
+            <circle cx="42" cy="42" r="${r}" class="ring-bg"/>
+            <circle cx="42" cy="42" r="${r}" class="ring-fg" style="stroke-dasharray:${circumference};stroke-dashoffset:${offset}"/>
+          </svg>
+          <div class="streak-ring-center">${workoutDays}/${goal}</div>
+        </div>
+        <div class="streak-info">
+          <div class="streak-flame">${streakText}</div>
+          <div class="streak-sub">${workoutDays} من ${goal} أيام تمرين هذا الأسبوع</div>
+        </div>
+      </div>
     `;
 
     const nums = k => dates.map(d => state.dailyLogs[d][k]).filter(v => v !== null && v !== undefined);
@@ -446,10 +521,10 @@
 
     const statsEl = document.getElementById('weeklyStats');
     statsEl.innerHTML = `
-      <div class="stat-box"><div class="stat-value">${stepsAvg ?? '—'}</div><div class="stat-label">متوسط الخطوات اليومي</div></div>
-      <div class="stat-box"><div class="stat-value">${calAvg ?? '—'}</div><div class="stat-label">متوسط السعرات اليومي</div>${goalBadgeHtml(calAvgStatus, 'سعرة', state.settings.calorieGoal, true)}</div>
-      <div class="stat-box"><div class="stat-value">${proteinAvg ?? '—'} جم</div><div class="stat-label">متوسط البروتين اليومي</div>${goalBadgeHtml(proteinAvgStatus, 'جم', state.settings.proteinGoal, true)}</div>
-      <div class="stat-box"><div class="stat-value">${workoutDays}</div><div class="stat-label">أيام تمرين هذا الأسبوع</div></div>
+      <div class="stat-box tile-1"><div class="stat-value">${stepsAvg ?? '—'}</div><div class="stat-label">متوسط الخطوات اليومي</div></div>
+      <div class="stat-box tile-2"><div class="stat-value">${calAvg ?? '—'}</div><div class="stat-label">متوسط السعرات اليومي</div>${goalBadgeHtml(calAvgStatus, 'سعرة', state.settings.calorieGoal, true)}</div>
+      <div class="stat-box tile-3"><div class="stat-value">${proteinAvg ?? '—'} جم</div><div class="stat-label">متوسط البروتين اليومي</div>${goalBadgeHtml(proteinAvgStatus, 'جم', state.settings.proteinGoal, true)}</div>
+      <div class="stat-box tile-4"><div class="stat-value">${workoutDays}</div><div class="stat-label">أيام تمرين هذا الأسبوع</div></div>
     `;
   }
 
@@ -788,11 +863,11 @@
     }
     emptyMsg.classList.add('hidden');
 
-    const colorBorder = cssVar('--border') || '#dbe1d7';
-    const colorMuted = cssVar('--muted') || '#5c6b63';
-    const colorInk = cssVar('--ink') || '#182420';
-    const colorAccent = cssVar('--accent') || '#1f7a4d';
-    const colorWarn = cssVar('--warn') || '#b5622c';
+    const colorBorder = cssVar('--border') || '#e6e0d2';
+    const colorMuted = cssVar('--muted') || '#837c6c';
+    const colorInk = cssVar('--ink') || '#2c2a24';
+    const colorAccent = cssVar('--accent') || '#8a9a52';
+    const colorWarn = cssVar('--warn') || '#c97a3d';
 
     const W = canvas.width, H = canvas.height;
     const padL = 52, padR = 20, padT = 24, padB = 40;

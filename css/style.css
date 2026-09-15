@@ -1,50 +1,62 @@
 @import url('https://fonts.googleapis.com/css2?family=Changa:wght@600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg: #f2f4ee;
+  --bg: #ece7dd;
   --surface: #ffffff;
-  --surface-2: #e9ede5;
-  --border: #dbe1d7;
-  --ink: #182420;
-  --muted: #5c6b63;
-  --accent: #1f7a4d;
-  --accent-dark: #145c39;
-  --accent-soft: #e2f0e8;
-  --warn: #b5622c;
-  --warn-soft: #f6e9df;
-  --radius: 14px;
+  --surface-2: #f4f0e6;
+  --border: #e6e0d2;
+  --ink: #2c2a24;
+  --muted: #837c6c;
+  --accent: #8a9a52;
+  --accent-dark: #6e7d3f;
+  --accent-soft: #eef1e1;
+  --warn: #c97a3d;
+  --warn-soft: #f7e8d8;
+  --tile-1: #f6d7c9;
+  --tile-2: #e2d7f2;
+  --tile-3: #cfe3f2;
+  --tile-4: #dfe7c8;
+  --radius: 18px;
   --font-display: 'Changa', Tahoma, sans-serif;
   --font-body: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #121815;
-    --surface: #1b2420;
-    --surface-2: #212b26;
-    --border: #2d3a34;
-    --ink: #eef3ef;
-    --muted: #9fb0a7;
-    --accent: #3fbd7d;
-    --accent-dark: #7fdba7;
-    --accent-soft: rgba(63,189,125,0.14);
+    --bg: #1c1a16;
+    --surface: #26231d;
+    --surface-2: #2e2a22;
+    --border: #3c372c;
+    --ink: #f2efe6;
+    --muted: #b3ab98;
+    --accent: #a3b56a;
+    --accent-dark: #c3d38f;
+    --accent-soft: rgba(163,181,106,0.16);
     --warn: #e2934f;
     --warn-soft: rgba(226,147,79,0.14);
+    --tile-1: #4a3327;
+    --tile-2: #362e46;
+    --tile-3: #253647;
+    --tile-4: #333d26;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #121815;
-  --surface: #1b2420;
-  --surface-2: #212b26;
-  --border: #2d3a34;
-  --ink: #eef3ef;
-  --muted: #9fb0a7;
-  --accent: #3fbd7d;
-  --accent-dark: #7fdba7;
-  --accent-soft: rgba(63,189,125,0.14);
+  --bg: #1c1a16;
+  --surface: #26231d;
+  --surface-2: #2e2a22;
+  --border: #3c372c;
+  --ink: #f2efe6;
+  --muted: #b3ab98;
+  --accent: #a3b56a;
+  --accent-dark: #c3d38f;
+  --accent-soft: rgba(163,181,106,0.16);
   --warn: #e2934f;
   --warn-soft: rgba(226,147,79,0.14);
+  --tile-1: #4a3327;
+  --tile-2: #362e46;
+  --tile-3: #253647;
+  --tile-4: #333d26;
 }
 
 * { box-sizing: border-box; }
@@ -310,7 +322,7 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .stat-box {
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 14px;
   padding: 14px 10px;
   text-align: right;
 }
@@ -323,22 +335,78 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 }
 .stat-box .stat-label { font-size: 0.76rem; color: var(--muted); margin-top: 4px; }
 
-.progress-bar-wrap {
-  background: var(--surface-2);
+/* pastel tile variants (borderless, tinted) — matching a multi-color stat-card look.
+   Scoped to .stat-box only: .delta-card already colors its value semantically
+   (good/bad), which a tile override would outrank and clobber. */
+.stat-box.tile-1, .stat-box.tile-2, .stat-box.tile-3, .stat-box.tile-4 { border: none; }
+.stat-box.tile-1 { background: var(--tile-1); }
+.stat-box.tile-2 { background: var(--tile-2); }
+.stat-box.tile-3 { background: var(--tile-3); }
+.stat-box.tile-4 { background: var(--tile-4); }
+.stat-box.tile-1 .stat-value, .stat-box.tile-2 .stat-value,
+.stat-box.tile-3 .stat-value, .stat-box.tile-4 .stat-value { color: var(--ink); }
+
+/* ---------- top week calendar strip ---------- */
+
+.week-calendar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+}
+.week-cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border-radius: 16px;
+  min-width: 42px;
+  flex-shrink: 0;
+  cursor: pointer;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 20px;
-  height: 18px;
-  overflow: hidden;
-  margin: 8px 0 4px;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
-.progress-bar-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 20px;
-  transition: width 0.3s ease;
+.week-cal-day:hover { border-color: var(--accent); }
+.week-cal-day .wcd-name { font-size: 0.68rem; color: var(--muted); }
+.week-cal-day .wcd-num { font-weight: 700; font-size: 0.95rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+.week-cal-day .wcd-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 1px; }
+.week-cal-day.today { border-color: var(--accent); }
+.week-cal-day.selected { background: var(--accent); border-color: var(--accent); }
+.week-cal-day.selected .wcd-name,
+.week-cal-day.selected .wcd-num { color: #fff; }
+.week-cal-day.selected .wcd-dot { background: #fff; }
+
+/* ---------- weekly streak ring ---------- */
+
+.streak-row { display: flex; align-items: center; gap: 16px; }
+.streak-ring-wrap { position: relative; width: 84px; height: 84px; flex-shrink: 0; }
+.streak-ring-wrap svg { width: 84px; height: 84px; }
+.ring-bg, .ring-fg { fill: none; stroke-width: 8; }
+.ring-bg { stroke: var(--surface-2); }
+.ring-fg {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 42px 42px;
+  transition: stroke-dashoffset 0.4s ease;
 }
-.progress-label { font-size: 0.9rem; color: var(--muted); }
-.progress-label strong { color: var(--ink); }
+.streak-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.streak-info { flex: 1; }
+.streak-flame { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--ink); }
+.streak-sub { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
 
 .chart-controls {
   display: flex;
