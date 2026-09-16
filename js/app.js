@@ -194,36 +194,6 @@
     ovulation: { icon: '🥚', label: 'الإباضة', tip: 'عادة ما تكون ذروة الطاقة والأداء البدني — وقت جيد للتمارين عالية الشدة إن رغبتِ.' },
     luteal: { icon: '🌗', label: 'المرحلة الأصفرية', tip: 'قد يزيد الشعور بالتعب أو الرغبة الغذائية قرب نهاية المرحلة — راقبي جسمك وعدّلي حسب حاجتك.' },
   };
-  // A warm, supportive line per phase — several options each so it doesn't
-  // repeat verbatim every time the same phase comes around, picked
-  // deterministically from the day so it stays stable within one day.
-  const CYCLE_ENCOURAGEMENT = {
-    menstrual: [
-      'جسمك يبذل مجهودًا حقيقيًا هذي الأيام — الراحة إنجاز مو كسل 💗',
-      'كوني لطيفة مع نفسك اليوم، أنتِ تستاهلين الرفق 🩷',
-      'كل يوم تعدينه بلطف مع نفسك هذي الأيام هو انتصار 💗',
-    ],
-    follicular: [
-      'طاقتك بترجع تدريجيًا — استقبليها بثقة وابدئي بخطوة 🌱',
-      'جسمك يستعيد نشاطه شوي شوي، وقتك الحين ✨',
-      'كل يوم أقوى من اللي قبله — استمري 🌱',
-    ],
-    ovulation: [
-      'أنتِ في قمة قوتك الآن — استمتعي فيها وحققي أقصى استفادة 🥳',
-      'هذا وقتك تلمعين فيه — اذهبي واستغلّيه 🔥',
-      'طاقتك اليوم في أعلى مستوياتها، لا تبخسي نفسك حقك 🥚',
-    ],
-    luteal: [
-      'جسمك يستعد لدورة جديدة — كوني صبورة معه، وهذا كافٍ 🌗',
-      'لو حسيتِ إنك أبطأ شوي، هذا طبيعي — استمري بلطف 💛',
-      'أنتِ تسوّين أكثر مما تتخيلين حتى بالأيام الأصعب 🌗',
-    ],
-  };
-  function cycleEncouragement(phase, forDate) {
-    const options = CYCLE_ENCOURAGEMENT[phase];
-    const dayIndex = Number(forDate.slice(-2)) || 0;
-    return options[dayIndex % options.length];
-  }
   // What to typically expect this phase, across four practical areas —
   // general patterns, not medical advice, and every body differs.
   const CYCLE_PHASE_EXPECT = {
@@ -426,7 +396,6 @@
         </div>
       </div>
       ${datesRow}
-      <div class="cycle-encourage">${cycleEncouragement(info.phase, todayStr())}</div>
       <div class="cycle-phase-line">
         <span class="cycle-phase-icon">${phaseInfo.icon}</span>
         <span><strong>${phaseInfo.label}</strong> — ${phaseInfo.tip}</span>

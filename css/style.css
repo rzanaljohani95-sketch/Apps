@@ -786,19 +786,6 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
   color: var(--ink);
 }
 
-.cycle-encourage {
-  text-align: center;
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--accent-dark);
-  background: var(--accent-soft);
-  border-radius: 12px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  line-height: 1.5;
-}
-
 .cycle-phase-line {
   display: flex;
   align-items: flex-start;
