@@ -488,6 +488,19 @@
   });
 
   onPeriodInput.addEventListener('change', () => {
+    // The whole row (checkbox + descriptive text) is one clickable <label>,
+    // so a stray tap on the text itself — not just the box — toggles it.
+    // Unchecking silently ends period tracking from today on, so confirm
+    // before accepting that instead of applying it immediately.
+    if (!onPeriodInput.checked) {
+      onPeriodInput.checked = true;
+      updatePeriodFieldUI(dailyDateInput.value);
+      showConfirm('هل انتهت دورتك الشهرية اليوم؟', () => {
+        onPeriodInput.checked = false;
+        updatePeriodFieldUI(dailyDateInput.value);
+      });
+      return;
+    }
     updatePeriodFieldUI(dailyDateInput.value);
   });
 
