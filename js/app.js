@@ -889,57 +889,36 @@
   // full Sunday-Saturday week, so a row that hit the weekly workout goal
   // gets a highlighted band + flame — a weekly streak marker laid over
   // the monthly view.
+  // "Goal completion" dot grid: a plain filled/empty dot per day of the
+  // month (no day numbers, no weekday header) — one dot per workout goal
+  // met that day, read at a glance like a progress dial rather than a
+  // literal calendar.
   function renderMonthlyProgressChart() {
     const el = document.getElementById('monthlyProgressChart');
     const now = new Date();
     const year = now.getFullYear(), month = now.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstWeekday = new Date(year, month, 1).getDay(); // 0 = Sunday
+    const daysElapsed = now.getDate();
     const today = todayStr();
-    const streak = computeWeeklyStreak();
 
-    const header = AR_DAY_NAMES.map(n => `<div class="month-cal-dow">${n.slice(0, 2)}</div>`).join('');
-
-    const flat = [];
-    for (let i = 0; i < firstWeekday; i++) flat.push(null);
-    for (let d = 1; d <= daysInMonth; d++) flat.push(d);
-    while (flat.length % 7 !== 0) flat.push(null);
-
-    let rows = '';
-    for (let r = 0; r < flat.length; r += 7) {
-      const rowDays = flat.slice(r, r + 7);
-      const workoutDays = rowDays.filter(d => d && state.dailyLogs[toDateStr(new Date(year, month, d))]?.workout?.done).length;
-      const rowGoalMet = rowDays.some(d => d !== null) && workoutDays >= STREAK_MIN_WORKOUTS_PER_WEEK;
-      const cells = rowDays.map(d => {
-        if (d === null) return '<div class="month-cal-cell empty"></div>';
-        const ds = toDateStr(new Date(year, month, d));
-        const done = !!state.dailyLogs[ds]?.workout?.done;
-        const cls = ['month-cal-cell'];
-        if (done) cls.push('done');
-        if (ds === today) cls.push('today');
-        return `<div class="${cls.join(' ')}"><span>${d}</span></div>`;
-      }).join('');
-      rows += `
-        <div class="month-cal-row-wrap">
-          <span class="month-cal-row-flame">${rowGoalMet ? '🔥' : ''}</span>
-          <div class="month-cal-row${rowGoalMet ? ' week-streak' : ''}">${cells}</div>
-        </div>
-      `;
+    let completed = 0;
+    let dots = '';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = toDateStr(new Date(year, month, d));
+      const done = !!state.dailyLogs[ds]?.workout?.done;
+      if (done && d <= daysElapsed) completed++;
+      const cls = ['goal-dot'];
+      if (done) cls.push('done');
+      if (ds === today) cls.push('today');
+      dots += `<span class="${cls.join(' ')}"></span>`;
     }
 
-    // Short label so the flame rows read as "these weeks are the streak"
-    // without a full sentence.
-    const streakNote = streak > 0
-      ? `🔥 ${arWeeksLabel(streak)} التزام`
-      : 'ابدئي سلسلتك 🔥';
-
     el.innerHTML = `
-      <div class="month-cal-streak-note">${streakNote}</div>
-      <div class="month-cal-row-wrap month-cal-header-wrap">
-        <span class="month-cal-row-flame"></span>
-        <div class="month-cal-row month-cal-dow-row">${header}</div>
+      <div class="goal-completion-head">
+        <div class="goal-completion-title">🎯 إكمال الهدف</div>
+        <div class="goal-completion-sub">${completed}/${daysElapsed} يوم</div>
       </div>
-      ${rows}
+      <div class="goal-dot-grid">${dots}</div>
     `;
   }
 

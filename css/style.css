@@ -337,95 +337,54 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 
 .muted { color: var(--muted); font-size: 0.85rem; }
 
-.month-chart-title {
-  margin-top: 18px;
-  margin-bottom: 10px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-
 .month-chart {
+  margin-top: 18px;
   padding-top: 4px;
 }
 
-.month-cal-row-wrap {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  max-width: 236px;
-  margin: 0 auto;
+.goal-completion-head {
+  margin-bottom: 14px;
 }
-.month-cal-row-wrap + .month-cal-row-wrap { margin-top: 3px; }
-.month-cal-header-wrap { margin-bottom: 2px; }
 
-.month-cal-streak-note {
-  max-width: 236px;
-  margin: 0 auto 8px;
-  text-align: center;
-  font-size: 0.72rem;
-  font-weight: 600;
+.goal-completion-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
   color: var(--accent-dark);
-  line-height: 1.4;
 }
 
-.month-cal-row-flame {
-  flex-shrink: 0;
-  width: 14px;
-  text-align: center;
-  font-size: 0.6rem;
-  line-height: 1;
+.goal-completion-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 2px;
 }
 
-.month-cal-row {
-  flex: 1;
+.goal-dot-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-  border-radius: 12px;
-  padding: 1px;
+  gap: 8px;
 }
 
-.month-cal-row.week-streak {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-.month-cal-dow-row { gap: 2px; }
-
-.month-cal-dow {
-  text-align: center;
-  font-size: 0.55rem;
-  font-weight: 600;
-  color: var(--muted);
-  padding-bottom: 2px;
-}
-
-.month-cal-cell {
+.goal-dot {
   aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-radius: 50%;
-  font-size: 0.62rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1.5px var(--border);
 }
 
-.month-cal-cell.empty { visibility: hidden; }
-
-.month-cal-cell.done {
+.goal-dot.done {
   background: var(--accent);
-  color: #fff;
-  font-weight: 700;
+  box-shadow: none;
 }
 
-.month-cal-cell.today {
-  box-shadow: inset 0 0 0 1.5px var(--accent-dark);
-  font-weight: 700;
+.goal-dot.today {
+  box-shadow: inset 0 0 0 2px var(--accent-dark);
 }
 
-.month-cal-cell.today.done { box-shadow: inset 0 0 0 1.5px var(--surface); }
+.goal-dot.today.done {
+  box-shadow: inset 0 0 0 2px var(--surface);
+}
 
 .stats-grid {
   display: grid;
