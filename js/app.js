@@ -883,31 +883,29 @@
   // Simple minimal line chart (one point per week overlapping the current
   // calendar month) showing workout days logged that week — a light
   // sparkline rather than a heavy bar grid.
-  const AR_WEEK_ORDINALS = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس'];
+  const AR_WEEK_ORDINALS = ['الأول', 'الثاني', 'الثالث', 'الرابع'];
 
-  // "Goal completion" dot grid: the month's days chunked into rows of
-  // exactly 7 (not aligned to actual weekdays — just day 1-7, 8-14, ...),
-  // each row labeled "الأسبوع الأول/الثاني/..." so what matters — how many
-  // times you trained that week — reads at a glance regardless of which
-  // weekday those workouts landed on.
+  // "Goal completion" dot grid: always exactly 4 rows of 7 ("a month = 4
+  // weeks"), sequential day chunks (not aligned to actual weekdays), each
+  // labeled "الأسبوع الأول/الثاني/...". Days 29-31 in longer months fall
+  // outside this 28-day view, same trade-off as elsewhere in the app.
   function renderMonthlyProgressChart() {
     const el = document.getElementById('monthlyProgressChart');
     const now = new Date();
     const year = now.getFullYear(), month = now.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const daysElapsed = now.getDate();
     const today = todayStr();
+    const monthlyGoal = (state.settings.weeklyWorkoutGoal || 4) * 4;
 
     let completed = 0;
     let rows = '';
-    for (let weekStart = 1, w = 0; weekStart <= daysInMonth; weekStart += 7, w++) {
+    for (let w = 0; w < 4; w++) {
+      const weekStart = w * 7 + 1;
       let dots = '';
       for (let i = 0; i < 7; i++) {
         const d = weekStart + i;
-        if (d > daysInMonth) { dots += '<span class="goal-dot placeholder"></span>'; continue; }
         const ds = toDateStr(new Date(year, month, d));
         const done = !!state.dailyLogs[ds]?.workout?.done;
-        if (done && d <= daysElapsed) completed++;
+        if (done) completed++;
         const cls = ['goal-dot'];
         if (done) cls.push('done');
         if (ds === today) cls.push('today');
@@ -915,7 +913,7 @@
       }
       rows += `
         <div class="goal-week-row">
-          <span class="goal-week-label">الأسبوع ${AR_WEEK_ORDINALS[w] || w + 1}</span>
+          <span class="goal-week-label">الأسبوع ${AR_WEEK_ORDINALS[w]}</span>
           <span class="goal-week-dots">${dots}</span>
         </div>
       `;
@@ -924,7 +922,7 @@
     el.innerHTML = `
       <div class="goal-completion-head">
         <div class="goal-completion-title">🎯 إكمال الهدف</div>
-        <div class="goal-completion-sub">${completed}/${daysElapsed} يوم</div>
+        <div class="goal-completion-sub">${completed}/${monthlyGoal} يوم</div>
       </div>
       <div class="goal-week-rows">${rows}</div>
     `;
