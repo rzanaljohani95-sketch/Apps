@@ -777,6 +777,11 @@
 
   /* ---------- weekly workout progress + weekly stats ---------- */
 
+  // A streak week only needs at least one logged workout, not the full
+  // weekly goal — it activates as soon as you show up that week, rather
+  // than only once every day of the goal is complete.
+  const STREAK_MIN_WORKOUTS_PER_WEEK = 1;
+
   function computeWeeklyStreak() {
     let streak = 0;
     let cursor = weekStart(new Date());
@@ -790,7 +795,7 @@
         return dd >= cursor && dd <= we;
       });
       const doneCount = datesInWeek.filter(d => state.dailyLogs[d].workout?.done).length;
-      if (doneCount >= state.settings.weeklyWorkoutGoal) {
+      if (doneCount >= STREAK_MIN_WORKOUTS_PER_WEEK) {
         streak++;
       } else if (i === 0 && !weekEnded) {
         // The current week is still in progress and hasn't hit the goal
@@ -820,7 +825,7 @@
     { min: 4,  text: n => `💪 شهر كامل من الالتزام — سلسلة ${arWeeksLabel(n)} متتالية` },
     { min: 2,  text: n => `🔥 استمراريتك رائعة — سلسلة ${arWeeksLabel(n)} متتالية` },
     { min: 1,  text: n => `🔥 سلسلة ${arWeeksLabel(n)} متتالية` },
-    { min: 0,  text: () => 'أكملي هدفك الأسبوعي لتبدئي سلسلتك 🔥' },
+    { min: 0,  text: () => 'سجّلي تمرين واحد هذا الأسبوع لتبدئي سلسلتك 🔥' },
   ];
   function milestonePhrase(milestones, n) {
     return milestones.find(t => n >= t.min).text(n);
@@ -891,7 +896,6 @@
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstWeekday = new Date(year, month, 1).getDay(); // 0 = Sunday
     const today = todayStr();
-    const goal = state.settings.weeklyWorkoutGoal || 4;
     const streak = computeWeeklyStreak();
 
     const header = AR_DAY_NAMES.map(n => `<div class="month-cal-dow">${n.slice(0, 2)}</div>`).join('');
@@ -905,7 +909,7 @@
     for (let r = 0; r < flat.length; r += 7) {
       const rowDays = flat.slice(r, r + 7);
       const workoutDays = rowDays.filter(d => d && state.dailyLogs[toDateStr(new Date(year, month, d))]?.workout?.done).length;
-      const rowGoalMet = rowDays.some(d => d !== null) && workoutDays >= goal;
+      const rowGoalMet = rowDays.some(d => d !== null) && workoutDays >= STREAK_MIN_WORKOUTS_PER_WEEK;
       const cells = rowDays.map(d => {
         if (d === null) return '<div class="month-cal-cell empty"></div>';
         const ds = toDateStr(new Date(year, month, d));
