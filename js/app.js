@@ -883,16 +883,13 @@
   // Simple minimal line chart (one point per week overlapping the current
   // calendar month) showing workout days logged that week — a light
   // sparkline rather than a heavy bar grid.
-  // Month calendar grid with workout days circled — the same idea as the
-  // "streak calendar" screens common in fitness apps, in the app's own
-  // warm palette instead of a line chart. Each displayed row is also a
-  // full Sunday-Saturday week, so a row that hit the weekly workout goal
-  // gets a highlighted band + flame — a weekly streak marker laid over
-  // the monthly view.
-  // "Goal completion" dot grid: a plain filled/empty dot per day of the
-  // month (no day numbers, no weekday header) — one dot per workout goal
-  // met that day, read at a glance like a progress dial rather than a
-  // literal calendar.
+  const AR_WEEK_ORDINALS = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس'];
+
+  // "Goal completion" dot grid: the month's days chunked into rows of
+  // exactly 7 (not aligned to actual weekdays — just day 1-7, 8-14, ...),
+  // each row labeled "الأسبوع الأول/الثاني/..." so what matters — how many
+  // times you trained that week — reads at a glance regardless of which
+  // weekday those workouts landed on.
   function renderMonthlyProgressChart() {
     const el = document.getElementById('monthlyProgressChart');
     const now = new Date();
@@ -902,15 +899,26 @@
     const today = todayStr();
 
     let completed = 0;
-    let dots = '';
-    for (let d = 1; d <= daysInMonth; d++) {
-      const ds = toDateStr(new Date(year, month, d));
-      const done = !!state.dailyLogs[ds]?.workout?.done;
-      if (done && d <= daysElapsed) completed++;
-      const cls = ['goal-dot'];
-      if (done) cls.push('done');
-      if (ds === today) cls.push('today');
-      dots += `<span class="${cls.join(' ')}"></span>`;
+    let rows = '';
+    for (let weekStart = 1, w = 0; weekStart <= daysInMonth; weekStart += 7, w++) {
+      let dots = '';
+      for (let i = 0; i < 7; i++) {
+        const d = weekStart + i;
+        if (d > daysInMonth) { dots += '<span class="goal-dot placeholder"></span>'; continue; }
+        const ds = toDateStr(new Date(year, month, d));
+        const done = !!state.dailyLogs[ds]?.workout?.done;
+        if (done && d <= daysElapsed) completed++;
+        const cls = ['goal-dot'];
+        if (done) cls.push('done');
+        if (ds === today) cls.push('today');
+        dots += `<span class="${cls.join(' ')}"></span>`;
+      }
+      rows += `
+        <div class="goal-week-row">
+          <span class="goal-week-label">الأسبوع ${AR_WEEK_ORDINALS[w] || w + 1}</span>
+          <span class="goal-week-dots">${dots}</span>
+        </div>
+      `;
     }
 
     el.innerHTML = `
@@ -918,7 +926,7 @@
         <div class="goal-completion-title">🎯 إكمال الهدف</div>
         <div class="goal-completion-sub">${completed}/${daysElapsed} يوم</div>
       </div>
-      <div class="goal-dot-grid">${dots}</div>
+      <div class="goal-week-rows">${rows}</div>
     `;
   }
 
