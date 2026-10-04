@@ -871,3 +871,25 @@ details[open] > summary::after { transform: rotate(180deg); }
 th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 th.sortable:hover { color: var(--accent-dark); }
 .row-actions { display: flex; gap: 4px; justify-content: center; }
+
+/* ---------- printable PDF report (via window.print) ---------- */
+
+.print-only { display: none; }
+
+.print-report-title { font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; margin-bottom: 2px; }
+.print-report-meta { color: #555; font-size: 0.85rem; margin-bottom: 18px; }
+.print-report-section-title { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; margin: 22px 0 10px; }
+.print-report table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.print-report th, .print-report td { border: 1px solid #ccc; padding: 5px 7px; text-align: right; }
+.print-report th { background: #f0ede4; }
+
+@media print {
+  body { background: #fff; }
+  .topbar, .tabs, main, #settingsModal, #confirmModal, #toast { display: none !important; }
+  #printReport {
+    display: block;
+    width: 100%;
+    background: #fff;
+    color: #000;
+  }
+}

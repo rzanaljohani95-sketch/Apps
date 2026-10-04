@@ -1368,6 +1368,61 @@
     window.open(url, '_blank');
   });
 
+  // Printing to PDF: the artifact sandbox blocks script-driven file
+  // downloads (no <a download>, no blob saves), so a real "export PDF"
+  // button isn't possible — the standard workaround is to build a clean
+  // printable report and trigger the browser's native print dialog,
+  // where "Save as PDF" is one of the destinations.
+  function renderPrintReport() {
+    const el = document.getElementById('printReport');
+    const dates = Object.keys(state.dailyLogs).sort().reverse();
+    const dailyRows = dates.map(d => {
+      const e = state.dailyLogs[d];
+      const w = e.workout;
+      const details = w?.done ? [w.type, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
+      return `<tr>
+        <td>${formatDateAr(d)}</td>
+        <td>${e.steps ?? '—'}</td>
+        <td>${e.calories ?? '—'}</td>
+        <td>${e.protein ?? '—'}</td>
+        <td>${w?.done ? '✅' : '—'}</td>
+        <td>${details}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6">لا توجد بيانات</td></tr>';
+
+    const sortedMeasurements = [...state.measurements].sort((a, b) => b.date.localeCompare(a.date));
+    const measureRows = sortedMeasurements.map(m => `
+      <tr>
+        <td>${formatDateAr(m.date)}</td>
+        ${MEASURE_FIELDS.map(f => `<td>${m[f.key] ?? '—'}</td>`).join('')}
+      </tr>
+    `).join('') || `<tr><td colspan="${MEASURE_FIELDS.length + 1}">لا توجد قياسات</td></tr>`;
+
+    el.innerHTML = `
+      <div class="print-report">
+        <div class="print-report-title">📊 تقرير متابعة الأداء الصحي والرياضي</div>
+        <div class="print-report-meta">تاريخ التقرير: ${formatDateAr(todayStr())}</div>
+
+        <div class="print-report-section-title">🗓️ السجل اليومي</div>
+        <table>
+          <thead><tr><th>التاريخ</th><th>خطوات</th><th>سعرات</th><th>بروتين</th><th>تمرين</th><th>تفاصيل</th></tr></thead>
+          <tbody>${dailyRows}</tbody>
+        </table>
+
+        <div class="print-report-section-title">📏 سجل القياسات</div>
+        <table>
+          <thead><tr><th>التاريخ</th>${MEASURE_FIELDS.map(f => `<th>${f.label}</th>`).join('')}</tr></thead>
+          <tbody>${measureRows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  document.getElementById('exportPdfBtn').addEventListener('click', () => {
+    renderPrintReport();
+    window.print();
+  });
+
   document.getElementById('importDataBtn').addEventListener('click', () => {
     document.getElementById('importDataInput').click();
   });
