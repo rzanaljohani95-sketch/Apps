@@ -942,7 +942,7 @@
 
   function renderRecentDailyTable() {
     const tbody = document.querySelector('#recentDailyTable tbody');
-    const dates = Object.keys(state.dailyLogs).sort().reverse().slice(0, 7);
+    const dates = Object.keys(state.dailyLogs).sort().reverse();
     tbody.innerHTML = dates.map(rowHtml).join('') ||
       `<tr><td colspan="6" class="muted">لا توجد بيانات بعد</td></tr>`;
     attachRowHandlers(tbody);
