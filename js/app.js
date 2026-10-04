@@ -1384,59 +1384,168 @@
     URL.revokeObjectURL(url);
   });
 
-  // Printing to PDF: the artifact sandbox blocks script-driven file
-  // downloads (no <a download>, no blob saves), so a real "export PDF"
-  // button isn't possible — the standard workaround is to build a clean
-  // printable report and trigger the browser's native print dialog,
-  // where "Save as PDF" is one of the destinations.
-  function renderPrintReport() {
-    const el = document.getElementById('printReport');
+  // PDF export: window.print() is unreliable (or outright blocked, same
+  // as native confirm()/alert() elsewhere in this app) inside embedded
+  // mobile-app webviews, so build an actual PDF file instead — draw each
+  // page on a canvas (the browser's own text engine handles Arabic
+  // shaping/RTL correctly in canvas text, unlike jsPDF's raw glyph
+  // placement) and hand the canvases to jsPDF as page images.
+  function chunkRows(rows, size) {
+    const pages = [];
+    for (let i = 0; i < rows.length; i += size) pages.push(rows.slice(i, i + size));
+    return pages.length ? pages : [[]];
+  }
+
+  function drawReportPageCanvas({ title, meta, columns, colWidths, rows, pageLabel }) {
+    const W = 794, H = 1123, pad = 40;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'right';
+
+    let y = 50;
+    if (title) {
+      ctx.fillStyle = '#2c2a24';
+      ctx.font = 'bold 22px "IBM Plex Sans Arabic", Tahoma, sans-serif';
+      ctx.fillText(title, W - pad, y);
+      y += 26;
+    }
+    if (meta) {
+      ctx.font = '13px "IBM Plex Sans Arabic", Tahoma, sans-serif';
+      ctx.fillStyle = '#7a7566';
+      ctx.fillText(meta, W - pad, y);
+      y += 30;
+    } else {
+      y += 14;
+    }
+
+    const tableX = pad, tableW = W - pad * 2, rowH = 26;
+
+    ctx.fillStyle = '#f0ede4';
+    ctx.fillRect(tableX, y, tableW, rowH);
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tableX, y, tableW, rowH);
+    ctx.font = 'bold 12px "IBM Plex Sans Arabic", Tahoma, sans-serif';
+    ctx.fillStyle = '#2c2a24';
+    let cx = W - pad - 8;
+    columns.forEach((col, i) => {
+      ctx.fillText(col, cx, y + 17);
+      cx -= colWidths[i];
+    });
+    y += rowH;
+
+    ctx.font = '12px "IBM Plex Sans Arabic", Tahoma, sans-serif';
+    rows.forEach((row, ri) => {
+      if (ri % 2 === 1) {
+        ctx.fillStyle = '#fafaf6';
+        ctx.fillRect(tableX, y, tableW, rowH);
+      }
+      ctx.strokeStyle = '#e0ddd2';
+      ctx.strokeRect(tableX, y, tableW, rowH);
+      ctx.fillStyle = '#2c2a24';
+      let cx2 = W - pad - 8;
+      row.forEach((cell, i) => {
+        ctx.fillText(String(cell ?? '—'), cx2, y + 17);
+        cx2 -= colWidths[i];
+      });
+      y += rowH;
+    });
+
+    if (pageLabel) {
+      ctx.font = '11px Tahoma, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#999';
+      ctx.fillText(pageLabel, W / 2, H - 20);
+    }
+
+    return canvas;
+  }
+
+  async function generateReportPdfBlob() {
+    await document.fonts.ready;
+
+    const W = 794, H = 1123;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'px', format: [W, H] });
+
     const dates = Object.keys(state.dailyLogs).sort().reverse();
     const dailyRows = dates.map(d => {
       const e = state.dailyLogs[d];
       const w = e.workout;
       const details = w?.done ? [w.type, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
-      return `<tr>
-        <td>${formatDateAr(d)}</td>
-        <td>${e.steps ?? '—'}</td>
-        <td>${e.calories ?? '—'}</td>
-        <td>${e.protein ?? '—'}</td>
-        <td>${w?.done ? '✅' : '—'}</td>
-        <td>${details}</td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="6">لا توجد بيانات</td></tr>';
+      return [formatDateAr(d), e.steps ?? '—', e.calories ?? '—', e.protein ?? '—', w?.done ? '✅' : '—', details];
+    });
+    const dailyCols = ['التاريخ', 'خطوات', 'سعرات', 'بروتين', 'تمرين', 'تفاصيل'];
+    const dailyColWidths = [110, 80, 80, 80, 60, 304];
+    const dailyPages = chunkRows(dailyRows, 30);
 
     const sortedMeasurements = [...state.measurements].sort((a, b) => b.date.localeCompare(a.date));
-    const measureRows = sortedMeasurements.map(m => `
-      <tr>
-        <td>${formatDateAr(m.date)}</td>
-        ${MEASURE_FIELDS.map(f => `<td>${m[f.key] ?? '—'}</td>`).join('')}
-      </tr>
-    `).join('') || `<tr><td colspan="${MEASURE_FIELDS.length + 1}">لا توجد قياسات</td></tr>`;
+    const measureCols = ['التاريخ', ...MEASURE_FIELDS.map(f => f.label)];
+    const measureColW = Math.floor((714 - 120) / MEASURE_FIELDS.length);
+    const measureColWidths = [120, ...MEASURE_FIELDS.map(() => measureColW)];
+    const measureRows = sortedMeasurements.map(m => [formatDateAr(m.date), ...MEASURE_FIELDS.map(f => m[f.key] ?? '—')]);
+    const measurePages = chunkRows(measureRows, 30);
 
-    el.innerHTML = `
-      <div class="print-report">
-        <div class="print-report-title">📊 تقرير متابعة الأداء الصحي والرياضي</div>
-        <div class="print-report-meta">تاريخ التقرير: ${formatDateAr(todayStr())}</div>
+    let firstPage = true;
+    dailyPages.forEach((pageRows, i) => {
+      if (!firstPage) doc.addPage();
+      firstPage = false;
+      const canvas = drawReportPageCanvas({
+        title: i === 0 ? '📊 تقرير متابعة الأداء الصحي والرياضي' : null,
+        meta: i === 0 ? `تاريخ التقرير: ${formatDateAr(todayStr())} — السجل اليومي` : 'السجل اليومي (تابع)',
+        columns: dailyCols,
+        colWidths: dailyColWidths,
+        rows: pageRows,
+        pageLabel: dailyPages.length > 1 ? `صفحة ${i + 1} من ${dailyPages.length}` : null,
+      });
+      doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, W, H);
+    });
 
-        <div class="print-report-section-title">🗓️ السجل اليومي</div>
-        <table>
-          <thead><tr><th>التاريخ</th><th>خطوات</th><th>سعرات</th><th>بروتين</th><th>تمرين</th><th>تفاصيل</th></tr></thead>
-          <tbody>${dailyRows}</tbody>
-        </table>
+    measurePages.forEach((pageRows, i) => {
+      doc.addPage();
+      const canvas = drawReportPageCanvas({
+        title: i === 0 ? 'سجل القياسات' : null,
+        meta: null,
+        columns: measureCols,
+        colWidths: measureColWidths,
+        rows: pageRows,
+        pageLabel: measurePages.length > 1 ? `صفحة ${i + 1} من ${measurePages.length}` : null,
+      });
+      doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, W, H);
+    });
 
-        <div class="print-report-section-title">📏 سجل القياسات</div>
-        <table>
-          <thead><tr><th>التاريخ</th>${MEASURE_FIELDS.map(f => `<th>${f.label}</th>`).join('')}</tr></thead>
-          <tbody>${measureRows}</tbody>
-        </table>
-      </div>
-    `;
+    return doc.output('blob');
   }
 
-  document.getElementById('exportPdfBtn').addEventListener('click', () => {
-    renderPrintReport();
-    window.print();
+  document.getElementById('exportPdfBtn').addEventListener('click', async () => {
+    if (typeof window.jspdf === 'undefined') {
+      showToast('⚠️ تعذّر تحميل أداة PDF — تأكدي من الاتصال بالإنترنت وحاولي مرة أخرى.', 5000);
+      return;
+    }
+    showToast('⏳ يتم تجهيز التقرير...');
+    try {
+      const blob = await generateReportPdfBlob();
+      if (downloadsCap) {
+        await downloadsCap.save({ filename: 'تقرير-الأداء.pdf', data: blob });
+        showToast('تم حفظ التقرير.');
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'تقرير-الأداء.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      if (err && err.code === 'declined') return;
+      console.error('PDF export failed:', err);
+      showToast('⚠️ تعذّر إنشاء التقرير، حاولي مرة أخرى.', 5000);
+    }
   });
 
   document.getElementById('importDataBtn').addEventListener('click', () => {
