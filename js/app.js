@@ -1362,10 +1362,26 @@
     renderAll();
   }
 
-  document.getElementById('exportData').addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'text/plain' });
+  document.getElementById('exportData').addEventListener('click', async () => {
+    const json = JSON.stringify(state, null, 2);
+    if (downloadsCap) {
+      try {
+        await downloadsCap.save({ filename: 'بيانات-التطبيق.json', data: json });
+        showToast('تم حفظ ملف البيانات.');
+      } catch (err) {
+        if (err && err.code !== 'declined') showToast('تعذّر حفظ الملف، حاولي مرة أخرى.');
+      }
+      return;
+    }
+    // Outside the artifact sandbox (plain static hosting) a direct blob
+    // download works fine in a normal browser tab.
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'بيانات-التطبيق.json';
+    a.click();
+    URL.revokeObjectURL(url);
   });
 
   // Printing to PDF: the artifact sandbox blocks script-driven file
@@ -1547,6 +1563,19 @@
     updateAssistantAvailability(!!s);
   }
 
+  // The artifact sandbox blocks a page's own file downloads (no <a download>,
+  // no blob/data saves) — the `downloads` capability is the sanctioned way
+  // to hand the viewer a file, with an explicit accept/decline prompt.
+  let downloadsCap = null;
+  async function initDownloads() {
+    if (typeof window.claude === 'undefined' || typeof window.claude.use !== 'function') return;
+    try {
+      downloadsCap = await window.claude.use('downloads');
+    } catch (e) {
+      downloadsCap = null;
+    }
+  }
+
   // One "professional tips" block per tab, all reading the FULL data (not
   // just that tab's), each focused on what that tab is about.
   const TIPS_SECTIONS = [
@@ -1612,4 +1641,5 @@
   renderAll();
   initCloudSync();
   initAssistant();
+  initDownloads();
 })();
