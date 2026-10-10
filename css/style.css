@@ -872,3 +872,10 @@ th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 th.sortable:hover { color: var(--accent-dark); }
 .row-actions { display: flex; gap: 4px; justify-content: center; }
 
+/* ---------- program-period highlight (e.g. new trainer schedule) ---------- */
+
+tr.program-row td {
+  background: var(--accent-soft);
+}
+.program-badge { font-size: 0.85em; }
+

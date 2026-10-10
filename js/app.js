@@ -32,6 +32,9 @@
         // build up their own average (see computeCycleInfo).
         periodLenOverride: 7,
         cycleLenOverride: 26,
+        // Marks the start of a new training program/schedule (e.g. with a
+        // trainer) so days from this date on can be highlighted in the log.
+        programStartDate: null,
       },
       // One-time data-seeding markers so a migration only ever runs once,
       // even after it syncs to the cloud and reloads elsewhere.
@@ -58,6 +61,7 @@
         goalDirections: { ...base.settings.goalDirections, ...(parsed.settings?.goalDirections || {}) },
         periodLenOverride: parsed.settings?.periodLenOverride ?? base.settings.periodLenOverride,
         cycleLenOverride: parsed.settings?.cycleLenOverride ?? base.settings.cycleLenOverride,
+        programStartDate: parsed.settings?.programStartDate ?? base.settings.programStartDate,
       },
       seedFlags: { ...base.seedFlags, ...(parsed.seedFlags || {}) },
     };
@@ -948,6 +952,18 @@
     attachRowHandlers(tbody);
   }
 
+  // Highlights days on/after a saved program start date (e.g. a new
+  // trainer schedule) in the daily-log tables.
+  function isInProgramPeriod(d) {
+    return !!(state.settings.programStartDate && d >= state.settings.programStartDate);
+  }
+  function dateCellHtml(d) {
+    const label = formatDateAr(d);
+    return d === state.settings.programStartDate
+      ? `${label} <span class="program-badge" title="بداية البرنامج الحالي">🎯</span>`
+      : label;
+  }
+
   function renderFullDailyTable() {
     const tbody = document.querySelector('#fullDailyTable tbody');
     const dates = Object.keys(state.dailyLogs).sort().reverse();
@@ -955,8 +971,8 @@
       const e = state.dailyLogs[d];
       const w = e.workout;
       const details = w?.done ? [w.type, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
-      return `<tr>
-        <td>${formatDateAr(d)}</td>
+      return `<tr${isInProgramPeriod(d) ? ' class="program-row"' : ''}>
+        <td>${dateCellHtml(d)}</td>
         <td>${e.steps ?? '—'}</td>
         <td>${calorieCellHtml(e.calories)}</td>
         <td>${proteinCellHtml(e.protein)}</td>
@@ -973,8 +989,8 @@
 
   function rowHtml(d) {
     const e = state.dailyLogs[d];
-    return `<tr>
-      <td>${formatDateAr(d)}</td>
+    return `<tr${isInProgramPeriod(d) ? ' class="program-row"' : ''}>
+      <td>${dateCellHtml(d)}</td>
       <td>${e.steps ?? '—'}</td>
       <td>${calorieCellHtml(e.calories)}</td>
       <td>${proteinCellHtml(e.protein)}</td>
@@ -1324,6 +1340,7 @@
     }
 
     document.getElementById('weeklyGoalInput').value = state.settings.weeklyWorkoutGoal;
+    document.getElementById('programStartInput').value = state.settings.programStartDate ?? '';
     document.getElementById('calorieGoalInput').value = state.settings.calorieGoal;
     document.getElementById('calorieMarginInput').value = state.settings.calorieMarginPct;
     document.getElementById('proteinGoalInput').value = state.settings.proteinGoal;
@@ -1346,6 +1363,7 @@
   function closeSettings() {
     const goal = Number(document.getElementById('weeklyGoalInput').value) || 4;
     state.settings.weeklyWorkoutGoal = Math.min(7, Math.max(1, goal));
+    state.settings.programStartDate = document.getElementById('programStartInput').value || null;
     state.settings.calorieGoal = Number(document.getElementById('calorieGoalInput').value) || state.settings.calorieGoal;
     state.settings.proteinGoal = Number(document.getElementById('proteinGoalInput').value) || state.settings.proteinGoal;
     state.settings.calorieMarginPct = Math.max(0, Number(document.getElementById('calorieMarginInput').value) || 0);
@@ -1466,14 +1484,19 @@
     return canvas;
   }
 
-  async function generateReportPdfBlob() {
+  async function generateReportPdfBlob(fromDate, toDate) {
     await document.fonts.ready;
 
     const W = 794, H = 1123;
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'px', format: [W, H] });
 
-    const dates = Object.keys(state.dailyLogs).sort().reverse();
+    const inRange = d => (!fromDate || d >= fromDate) && (!toDate || d <= toDate);
+    const rangeLabel = fromDate || toDate
+      ? `الفترة: من ${fromDate ? formatDateAr(fromDate) : 'البداية'} إلى ${toDate ? formatDateAr(toDate) : 'اليوم'}`
+      : 'كل الفترة المسجّلة';
+
+    const dates = Object.keys(state.dailyLogs).filter(inRange).sort().reverse();
     const dailyRows = dates.map(d => {
       const e = state.dailyLogs[d];
       const w = e.workout;
@@ -1484,7 +1507,7 @@
     const dailyColWidths = [110, 80, 80, 80, 60, 304];
     const dailyPages = chunkRows(dailyRows, 30);
 
-    const sortedMeasurements = [...state.measurements].sort((a, b) => b.date.localeCompare(a.date));
+    const sortedMeasurements = [...state.measurements].filter(m => inRange(m.date)).sort((a, b) => b.date.localeCompare(a.date));
     const measureCols = ['التاريخ', ...MEASURE_FIELDS.map(f => f.label)];
     const measureColW = Math.floor((714 - 120) / MEASURE_FIELDS.length);
     const measureColWidths = [120, ...MEASURE_FIELDS.map(() => measureColW)];
@@ -1497,7 +1520,7 @@
       firstPage = false;
       const canvas = drawReportPageCanvas({
         title: i === 0 ? '📊 تقرير متابعة الأداء الصحي والرياضي' : null,
-        meta: i === 0 ? `تاريخ التقرير: ${formatDateAr(todayStr())} — السجل اليومي` : 'السجل اليومي (تابع)',
+        meta: i === 0 ? `${rangeLabel} — السجل اليومي` : 'السجل اليومي (تابع)',
         columns: dailyCols,
         colWidths: dailyColWidths,
         rows: pageRows,
@@ -1522,14 +1545,43 @@
     return doc.output('blob');
   }
 
-  document.getElementById('exportPdfBtn').addEventListener('click', async () => {
+  const exportRangeModal = document.getElementById('exportRangeModal');
+  const exportFromDateInput = document.getElementById('exportFromDate');
+  const exportToDateInput = document.getElementById('exportToDate');
+  const exportProgramRangeBtn = document.getElementById('exportProgramRangeBtn');
+
+  document.getElementById('exportPdfBtn').addEventListener('click', () => {
+    const allDates = Object.keys(state.dailyLogs).sort();
+    exportFromDateInput.value = allDates[0] || '';
+    exportToDateInput.value = todayStr();
+    exportProgramRangeBtn.classList.toggle('hidden', !state.settings.programStartDate);
+    exportRangeModal.classList.remove('hidden');
+  });
+
+  exportProgramRangeBtn.addEventListener('click', () => {
+    exportFromDateInput.value = state.settings.programStartDate;
+    exportToDateInput.value = todayStr();
+  });
+
+  document.getElementById('exportRangeCancelBtn').addEventListener('click', () => {
+    exportRangeModal.classList.add('hidden');
+  });
+
+  document.getElementById('exportRangeConfirmBtn').addEventListener('click', async () => {
     if (typeof window.jspdf === 'undefined') {
       showToast('⚠️ تعذّر تحميل أداة PDF — تأكدي من الاتصال بالإنترنت وحاولي مرة أخرى.', 5000);
       return;
     }
+    const fromDate = exportFromDateInput.value || null;
+    const toDate = exportToDateInput.value || null;
+    if (fromDate && toDate && fromDate > toDate) {
+      showToast('تاريخ البداية بعد تاريخ النهاية — تأكدي من الفترة.');
+      return;
+    }
+    exportRangeModal.classList.add('hidden');
     showToast('⏳ يتم تجهيز التقرير...');
     try {
-      const blob = await generateReportPdfBlob();
+      const blob = await generateReportPdfBlob(fromDate, toDate);
       if (downloadsCap) {
         await downloadsCap.save({ filename: 'تقرير-الأداء.pdf', data: blob });
         showToast('تم حفظ التقرير.');
@@ -1559,23 +1611,8 @@
     reader.onload = () => {
       try {
         const parsed = JSON.parse(reader.result);
-        const base = defaultState();
         showConfirm('سيتم استبدال جميع البيانات الحالية بالبيانات المستوردة. متابعة؟', () => {
-          state = {
-            dailyLogs: parsed.dailyLogs || base.dailyLogs,
-            measurements: parsed.measurements || base.measurements,
-            settings: {
-              weeklyWorkoutGoal: parsed.settings?.weeklyWorkoutGoal ?? base.settings.weeklyWorkoutGoal,
-              calorieGoal: parsed.settings?.calorieGoal ?? base.settings.calorieGoal,
-              proteinGoal: parsed.settings?.proteinGoal ?? base.settings.proteinGoal,
-              calorieMarginPct: parsed.settings?.calorieMarginPct ?? base.settings.calorieMarginPct,
-              proteinMarginPct: parsed.settings?.proteinMarginPct ?? base.settings.proteinMarginPct,
-              goalDirections: { ...base.settings.goalDirections, ...(parsed.settings?.goalDirections || {}) },
-              periodLenOverride: parsed.settings?.periodLenOverride ?? base.settings.periodLenOverride,
-              cycleLenOverride: parsed.settings?.cycleLenOverride ?? base.settings.cycleLenOverride,
-            },
-            seedFlags: { ...base.seedFlags, ...(parsed.seedFlags || {}) },
-          };
+          state = normalizeState(parsed);
           saveState();
           renderAll();
           closeSettings();

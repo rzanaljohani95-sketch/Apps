@@ -276,6 +276,11 @@
       <label for="weeklyGoalInput">عدد أيام التمرين المستهدفة أسبوعيًا</label>
       <input type="number" id="weeklyGoalInput" min="1" max="7">
     </div>
+    <div class="field">
+      <label for="programStartInput">تاريخ بداية برنامج/جدول حالي (مع مدربة مثلًا)</label>
+      <input type="date" id="programStartInput">
+      <p class="muted">يميّز الأيام من هذا التاريخ في سجل الأيام. اتركه فارغًا لإلغاء التمييز.</p>
+    </div>
 
     <div class="settings-section-title">الأهداف اليومية</div>
     <p class="muted">هامش طبيعي حول كل هدف يُحتسب ضمنه بلوغه (نسبة مئوية من الهدف).</p>
@@ -333,6 +338,26 @@
     <div class="modal-actions">
       <button id="confirmYesBtn" class="btn-primary">تأكيد</button>
       <button id="confirmNoBtn" class="btn-secondary">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== EXPORT RANGE MODAL ===================== -->
+<div id="exportRangeModal" class="modal hidden">
+  <div class="modal-content">
+    <h2>تصدير تقرير PDF</h2>
+    <div class="field">
+      <label for="exportFromDate">من تاريخ</label>
+      <input type="date" id="exportFromDate">
+    </div>
+    <div class="field">
+      <label for="exportToDate">إلى تاريخ</label>
+      <input type="date" id="exportToDate">
+    </div>
+    <button type="button" id="exportProgramRangeBtn" class="btn-secondary hidden">📅 منذ بداية البرنامج الحالي فقط</button>
+    <div class="modal-actions">
+      <button id="exportRangeConfirmBtn" class="btn-primary">تصدير</button>
+      <button id="exportRangeCancelBtn" class="btn-secondary">إلغاء</button>
     </div>
   </div>
 </div>
