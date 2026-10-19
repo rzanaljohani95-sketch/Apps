@@ -6,88 +6,143 @@
 <title>شاشة المدينة المنورة</title>
 <!--
   شاشة تلفاز خفيفة: الوقت، الطقس، إنذارات المركز الوطني للأرصاد، أوقات الصلاة.
-  ملف واحد بلا مكتبات ولا صور ولا حركات CSS، لتقليل استهلاك الرام على متصفح التلفاز.
-  مكتوبة بـ ES5 + XMLHttpRequest لتعمل على متصفحات التلفزيونات القديمة.
+  خلفية من صور مجلد images/ تتبدّل ببطء، وبطاقات شبه شفافة فوقها.
+  بلا مكتبات ولا backdrop-filter (ثقيل على معالجات التلفاز)، ومكتوبة بـ ES5 +
+  XMLHttpRequest لتعمل على متصفحات التلفزيونات القديمة.
 -->
 <style>
-  :root { --bg:#0b1220; --card:#131c2e; --line:#22304a; --text:#e8eef8; --muted:#8fa0bb; --accent:#3fb68b; }
+  :root { --glass:rgba(16,18,22,0.62); --glass-2:rgba(16,18,22,0.78); --text:#fff; --muted:rgba(255,255,255,0.68);
+    --blue:#2747e6; --yellow:#f3b70a; --orange:#f47a16; --red:#de2f2a; --r:2.2vw; }
   * { box-sizing:border-box; margin:0; padding:0; }
-  html, body { height:100%; background:var(--bg); color:var(--text);
+  html, body { height:100%; background:#0d1410; color:var(--text);
     font-family:"Segoe UI", Tahoma, Arial, sans-serif; overflow:hidden; }
-  body { display:flex; flex-direction:column; padding:2.2vw 3vw; gap:1.6vw; }
-  .row { display:flex; gap:1.6vw; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:1.2vw; padding:1.6vw 2vw; }
+
+  /* طبقتا الخلفية: واحدة ظاهرة والأخرى تُحمَّل فيها الصورة التالية ثم تتبادلان */
+  .bg { position:fixed; inset:0; top:0; right:0; bottom:0; left:0; background:#1d2a22 center/cover no-repeat;
+    opacity:0; transition:opacity 2s linear; }
+  .bg.on { opacity:1; }
+  #shade { position:fixed; top:0; right:0; bottom:0; left:0;
+    background:linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 50%, rgba(0,0,0,0.45) 100%); }
+
+  #ui { position:relative; height:100%; padding:3.2vw 3.2vw 2.4vw; display:flex; flex-direction:column; }
+  .pill { background:var(--glass); border-radius:var(--r); padding:1vw 1.8vw; }
   .muted { color:var(--muted); }
 
-  #top { flex:0 0 auto; }
-  #clockCard { flex:1.3; display:flex; flex-direction:column; justify-content:center; }
-  #clock { font-size:7.5vw; font-weight:700; line-height:1; direction:ltr; text-align:right; font-variant-numeric:tabular-nums; }
-  #dates { font-size:1.9vw; margin-top:0.8vw; }
-  #city { font-size:1.6vw; }
+  /* الشريط العلوي */
+  #top { display:flex; justify-content:space-between; align-items:flex-start; }
+  #topLeft { display:flex; gap:1.4vw; align-items:stretch; }
+  #city { font-size:1.6vw; font-weight:600; border-radius:5vw; padding:0.9vw 2vw; }
+  #clockPill { text-align:right; }
+  #clock { font-size:2.6vw; font-weight:700; line-height:1.1; }
+  .small { font-size:1.15vw; line-height:1.45; }
+  #weatherPill { display:flex; align-items:center; gap:1vw; }
+  #wIcon { font-size:2.6vw; line-height:1; }
+  #wTemp { font-size:2.4vw; font-weight:700; line-height:1.1; }
 
-  #weatherCard { flex:1; display:flex; align-items:center; gap:2vw; }
-  #wIcon { font-size:7vw; line-height:1; }
-  #wTemp { font-size:5.5vw; font-weight:700; direction:ltr; }
-  #wDesc { font-size:2vw; }
-  #wMore { font-size:1.5vw; margin-top:0.4vw; }
+  /* البطاقات السفلية */
+  #cards { margin-top:auto; display:flex; gap:1.4vw; align-items:stretch; }
+  .card { border-radius:var(--r); padding:1.8vw 2vw; display:flex; flex-direction:column; justify-content:center; }
+  .label { font-size:1.25vw; color:var(--muted); margin-bottom:0.5vw; }
 
-  #alert { font-size:2vw; display:flex; align-items:center; gap:1.4vw; border-width:0.3vw; }
-  #alert .dot { width:2.2vw; height:2.2vw; border-radius:50%; flex:0 0 auto; background:var(--accent); }
-  #alertText b { font-size:2.2vw; }
-  #alertSub { font-size:1.4vw; margin-top:0.3vw; }
-  .lvl-yellow { border-color:#f2c200 !important; } .lvl-yellow .dot { background:#f2c200 !important; }
-  .lvl-orange { border-color:#ff8a00 !important; } .lvl-orange .dot { background:#ff8a00 !important; }
-  .lvl-red    { border-color:#e5322d !important; } .lvl-red .dot    { background:#e5322d !important; }
-  .lvl-none   { border-color:var(--accent) !important; }
-  .lvl-unknown{ border-color:var(--line) !important; } .lvl-unknown .dot { background:var(--muted) !important; }
+  #nextCard { flex:1.45; background:var(--blue); }
+  #nextCard .label { color:rgba(255,255,255,0.78); }
+  #nextRow { display:flex; align-items:baseline; justify-content:space-between; gap:1.5vw; }
+  #nextName { font-size:4.4vw; font-weight:800; line-height:1.15; }
+  #countdown { font-size:3.6vw; font-weight:700; letter-spacing:0.1vw; }
+  .chips { display:flex; gap:0.7vw; margin-top:1vw; }
+  .chip { font-size:1.2vw; padding:0.35vw 1.1vw; border-radius:3vw; background:rgba(14,22,70,0.55); }
+  .chip.light { background:#fff; color:#1b2a8a; font-weight:700; }
 
-  #prayersWrap { flex:1 1 auto; display:flex; flex-direction:column; justify-content:flex-end; gap:1.6vw; min-height:0; }
-  #countdownCard { text-align:center; flex:1; display:flex; flex-direction:column; justify-content:center; }
-  #nextName { font-size:2.4vw; }
-  #countdown { font-size:5vw; font-weight:700; direction:ltr; font-variant-numeric:tabular-nums; color:var(--accent); line-height:1.1; }
-  .prayer { flex:1; text-align:center; padding:1vw 0.5vw; }
-  .prayer .n { font-size:2vw; }
-  .prayer .t { font-size:2.8vw; font-weight:700; direction:ltr; margin-top:0.4vw; font-variant-numeric:tabular-nums; }
-  .prayer.next { border-color:var(--accent); background:#163327; }
-  .prayer.sun .n, .prayer.sun .t { color:var(--muted); }
-  #status { font-size:1.1vw; text-align:center; }
+  #afterCard { flex:1; background:var(--glass-2); }
+  .split { display:flex; justify-content:space-between; align-items:center; gap:1vw; }
+  .big { font-size:2.3vw; font-weight:800; line-height:1.2; }
+  .num { font-size:3.6vw; font-weight:800; line-height:1; text-align:center; }
+
+  #alertCard { flex:1; background:var(--glass-2); }
+  #alertCard.lvl-yellow { background:var(--yellow); color:#1a1a1a; }
+  #alertCard.lvl-orange { background:var(--orange); color:#1a1a1a; }
+  #alertCard.lvl-red    { background:var(--red); }
+  #alertCard.lvl-yellow .label, #alertCard.lvl-orange .label, #alertCard.lvl-yellow .muted, #alertCard.lvl-orange .muted { color:rgba(0,0,0,0.62); }
+  #alertTitle { font-size:2vw; font-weight:800; line-height:1.25; }
+  #alertSub { font-size:1.15vw; margin-top:0.4vw; max-height:3.4vw; overflow:hidden; }
+  #alertIcon { font-size:3.4vw; line-height:1; }
+
+  /* شريط أوقات الصلاة */
+  #dock { align-self:center; margin-top:1.6vw; display:flex; gap:0.6vw; padding:0.6vw; border-radius:4vw; background:var(--glass-2); }
+  .p { text-align:center; padding:0.55vw 1.5vw; border-radius:3vw; }
+  .p .n { font-size:1.05vw; color:var(--muted); }
+  .p .t { font-size:1.55vw; font-weight:700; }
+  .p.sun .t { color:var(--muted); }
+  .p.next { background:#fff; color:#111; }
+  .p.next .n { color:#555; }
 </style>
 </head>
 <body>
 
-<div id="top" class="row">
-  <div id="clockCard" class="card">
-    <div id="city" class="muted">🕌 المدينة المنورة</div>
-    <div id="clock">--:--:--</div>
-    <div id="dates"><span id="gDate"></span> <span id="hDate" class="muted"></span></div>
-  </div>
-  <div id="weatherCard" class="card">
-    <div id="wIcon">⏳</div>
-    <div>
-      <div id="wTemp">--°</div>
-      <div id="wDesc">جارٍ تحميل الطقس…</div>
-      <div id="wMore" class="muted"></div>
+<div id="bgA" class="bg"></div>
+<div id="bgB" class="bg"></div>
+<div id="shade"></div>
+
+<div id="ui">
+  <div id="top">
+    <div id="city" class="pill">🕌 المدينة المنورة</div>
+    <div id="topLeft">
+      <div id="weatherPill" class="pill">
+        <div id="wIcon">⏳</div>
+        <div>
+          <div id="wTemp">--°</div>
+          <div id="wDesc" class="small muted">جارٍ تحميل الطقس…</div>
+        </div>
+      </div>
+      <div id="clockPill" class="pill">
+        <div id="clock">--:--</div>
+        <div id="gDate" class="small"></div>
+        <div id="hDate" class="small muted"></div>
+      </div>
     </div>
   </div>
-</div>
 
-<div id="alert" class="card lvl-unknown">
-  <span class="dot"></span>
-  <div>
-    <div id="alertText"><b>جارٍ التحقق من إنذارات المركز الوطني للأرصاد…</b></div>
-    <div id="alertSub" class="muted"></div>
+  <div id="cards">
+    <div id="nextCard" class="card">
+      <div class="label" id="nextLabel">الصلاة القادمة</div>
+      <div id="nextRow">
+        <div id="nextName">--</div>
+        <div id="countdown">--:--:--</div>
+      </div>
+      <div class="chips">
+        <span class="chip light" id="nextTime">--</span>
+        <span class="chip">تقويم أم القرى</span>
+      </div>
+    </div>
+
+    <div id="afterCard" class="card">
+      <div class="split">
+        <div>
+          <div class="label">ثم</div>
+          <div class="big" id="afterName">--</div>
+          <div class="small muted" id="afterSub"></div>
+        </div>
+        <div>
+          <div class="num" id="afterTime">--</div>
+          <div class="small muted" id="afterAmPm" style="text-align:center"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="alertCard" class="card">
+      <div class="split">
+        <div>
+          <div class="label">المركز الوطني للأرصاد</div>
+          <div id="alertTitle">جارٍ التحقق…</div>
+          <div id="alertSub" class="muted"></div>
+        </div>
+        <div id="alertIcon"></div>
+      </div>
+    </div>
   </div>
-</div>
 
-<div id="prayersWrap">
-  <div id="countdownCard" class="card">
-    <div id="nextName">الصلاة القادمة</div>
-    <div id="countdown">--:--:--</div>
-  </div>
-  <div id="prayers" class="row"></div>
+  <div id="dock"></div>
 </div>
-
-<div id="status" class="muted"></div>
 
 <script>
 (function () {
@@ -97,6 +152,12 @@
 
   var LAT = 24.4672, LON = 39.6111;   // المدينة المنورة
   var TZ_OFFSET_H = 3;                 // توقيت السعودية UTC+3 بلا توقيت صيفي
+
+  // صور الخلفية: انسخ صور التلفاز إلى مجلد images/ بهذه الأسماء (أو عدّل القائمة).
+  // الأسماء غير الموجودة تُتجاوز تلقائياً. يُفضّل JPG بمقاس 1920×1080 لتوفير الذاكرة.
+  var BG_IMAGES = [];
+  for (var bi = 1; bi <= 30; bi++) BG_IMAGES.push('images/' + bi + '.jpg');
+  var BG_EVERY_MS = 5 * 60 * 1000;
 
   var WEATHER_URL = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
     '&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m' +
@@ -124,8 +185,11 @@
 
   function $(id) { return document.getElementById(id); }
 
-  // يحدّث النص فقط إذا تغيّر، لتجنّب إعادة الرسم كل ثانية بلا داعٍ.
-  function setText(el, txt) { if (el.textContent !== txt) el.textContent = txt; }
+  var AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+  function ar(s) { return String(s).replace(/[0-9]/g, function (c) { return AR_DIGITS.charAt(+c); }); }
+
+  // يحدّث النص فقط إذا تغيّر (بأرقام عربية)، لتجنّب إعادة الرسم بلا داعٍ.
+  function setText(el, txt) { txt = ar(txt); if (el.textContent !== txt) el.textContent = txt; }
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
 
@@ -135,13 +199,12 @@
 
   function dayKey(d) { return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
 
-  function fmt12(mins) {
+  function hm(mins) {
     var h = Math.floor(mins / 60) % 24, m = Math.round(mins % 60);
     if (m === 60) { h = (h + 1) % 24; m = 0; }
-    var suffix = h < 12 ? 'ص' : 'م';
-    var h12 = h % 12; if (h12 === 0) h12 = 12;
-    return h12 + ':' + pad(m) + ' ' + suffix;
+    return [(h % 12 || 12) + ':' + pad(m), h < 12 ? 'ص' : 'م'];
   }
+  function fmt12(mins) { var x = hm(mins); return x[0] + ' ' + x[1]; }
 
   function getJSON(url, ok, fail) {
     var x = new XMLHttpRequest();
@@ -160,12 +223,28 @@
     x.send();
   }
 
-  var statusParts = {};
-  function setStatus(part, txt) {
-    statusParts[part] = txt;
-    var out = [];
-    for (var k in statusParts) if (statusParts[k]) out.push(statusParts[k]);
-    setText($('status'), out.join(' · '));
+  /* ============================ BACKGROUND ============================ */
+
+  var bgLayers = [$('bgA'), $('bgB')], bgShown = 0, bgIdx = -1, bgFails = 0;
+
+  // يحمّل الصورة التالية في الطبقة المخفية ثم يُظهرها، ويُفرغ الطبقة القديمة
+  // بعد انتهاء التلاشي حتى لا تبقى صورتان مفكوكتان في الذاكرة.
+  function nextBackground() {
+    if (bgFails >= BG_IMAGES.length) return;   // لا توجد صور: تبقى الخلفية الداكنة
+    bgIdx = (bgIdx + 1) % BG_IMAGES.length;
+    var url = BG_IMAGES[bgIdx], img = new Image();
+    img.onload = function () {
+      bgFails = 0;
+      var hidden = bgLayers[1 - bgShown], old = bgLayers[bgShown];
+      hidden.style.backgroundImage = 'url("' + url + '")';
+      hidden.className = 'bg on';
+      old.className = 'bg';
+      bgShown = 1 - bgShown;
+      setTimeout(function () { old.style.backgroundImage = 'none'; }, 2500);
+      img = null;
+    };
+    img.onerror = function () { img = null; bgFails++; nextBackground(); };
+    img.src = url;
   }
 
   /* ============================ CLOCK ============================ */
@@ -174,8 +253,7 @@
   var DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
   function renderClock(now) {
-    var h = now.getUTCHours(), h12 = h % 12 || 12;
-    setText($('clock'), h12 + ':' + pad(now.getUTCMinutes()) + ':' + pad(now.getUTCSeconds()) + (h < 12 ? ' ص' : ' م'));
+    setText($('clock'), fmt12(now.getUTCHours() * 60 + now.getUTCMinutes()));
     setText($('gDate'), DAYS[now.getUTCDay()] + ' ' + now.getUTCDate() + ' ' + G_MONTHS[now.getUTCMonth()] + ' ' + now.getUTCFullYear());
   }
 
@@ -184,7 +262,7 @@
   // رموز WMO المستخدمة في Open-Meteo
   function weatherInfo(code) {
     if (code === 0) return ['☀️', 'صحو'];
-    if (code === 1) return ['🌤️', 'غائم جزئياً'];
+    if (code === 1) return ['🌤️', 'مشمس غالباً'];
     if (code === 2) return ['⛅', 'غائم جزئياً'];
     if (code === 3) return ['☁️', 'غائم'];
     if (code === 45 || code === 48) return ['🌫️', 'ضباب'];
@@ -201,13 +279,11 @@
       var c = d.current || {}, daily = d.daily || {};
       var info = weatherInfo(c.weather_code);
       setText($('wIcon'), info[0]);
-      setText($('wTemp'), Math.round(c.temperature_2m) + '°C');
-      setText($('wDesc'), info[1] + ' · المحسوسة ' + Math.round(c.apparent_temperature) + '°');
-      var more = 'الرطوبة ' + c.relative_humidity_2m + '% · الرياح ' + Math.round(c.wind_speed_10m) + ' كم/س';
-      if (daily.temperature_2m_max) more += ' · العظمى ' + Math.round(daily.temperature_2m_max[0]) + '° الصغرى ' + Math.round(daily.temperature_2m_min[0]) + '°';
-      setText($('wMore'), more);
-      setStatus('w', '');
-    }, function () { setStatus('w', 'تعذّر تحديث الطقس'); });
+      setText($('wTemp'), Math.round(c.temperature_2m) + '°');
+      var desc = info[1];
+      if (daily.temperature_2m_max) desc += ' · ع ' + Math.round(daily.temperature_2m_max[0]) + ' ص ' + Math.round(daily.temperature_2m_min[0]);
+      setText($('wDesc'), desc);
+    }, function () { setText($('wDesc'), 'تعذّر تحديث الطقس'); });
   }
 
   /* ============================ NCM ALERTS ============================ */
@@ -258,37 +334,26 @@
     return out;
   }
 
-  function renderAlerts(alerts) {
-    var box = $('alert');
-    if (!alerts.length) {
-      box.className = 'card lvl-none';
-      setText($('alertText'), '✅ لا توجد إنذارات من المركز الوطني للأرصاد على المدينة المنورة');
-      setText($('alertSub'), '');
-      return;
-    }
-    var top = alerts[0];
-    box.className = 'card lvl-' + (top.level || 'unknown');
-    var color = top.level ? 'إنذار ' + LEVEL_NAME[top.level] : 'إنذار';
-    $('alertText').innerHTML = '';
-    var b = document.createElement('b');
-    b.textContent = '⚠️ ' + color + ' — ' + top.type;
-    $('alertText').appendChild(b);
-    var sub = top.desc || '';
-    if (top.until) sub += (sub ? ' · ' : '') + 'حتى ' + top.until;
-    if (alerts.length > 1) sub += (sub ? ' · ' : '') + '(+' + (alerts.length - 1) + ' إنذارات أخرى)';
-    if (sub.length > 220) sub = sub.slice(0, 217) + '…';
+  function showAlert(cls, icon, title, sub) {
+    $('alertCard').className = 'card' + (cls ? ' lvl-' + cls : '');
+    setText($('alertIcon'), icon);
+    setText($('alertTitle'), title);
     setText($('alertSub'), sub);
+  }
+
+  function renderAlerts(alerts) {
+    if (!alerts.length) { showAlert('', '✓', 'لا توجد إنذارات', 'على المدينة المنورة حالياً'); return; }
+    var top = alerts[0];
+    var sub = top.type;
+    if (top.until) sub += ' · حتى ' + top.until;
+    if (alerts.length > 1) sub += ' · +' + (alerts.length - 1) + ' أخرى';
+    if (sub.length > 120) sub = sub.slice(0, 117) + '…';
+    showAlert(top.level, '⚠', top.level ? 'إنذار ' + LEVEL_NAME[top.level] : 'إنذار', sub);
   }
 
   function loadAlerts(i) {
     i = i || 0;
-    if (i >= ALERT_URLS.length) {
-      var box = $('alert');
-      box.className = 'card lvl-unknown';
-      setText($('alertText'), 'تعذّر الاتصال بخدمة إنذارات المركز الوطني للأرصاد');
-      setText($('alertSub'), 'تحقق يدوياً من ncm.gov.sa — ستتم المحاولة مجدداً تلقائياً');
-      return;
-    }
+    if (i >= ALERT_URLS.length) { showAlert('', '?', 'تعذّر الاتصال', 'تحقق من ncm.gov.sa — إعادة المحاولة تلقائياً'); return; }
     getJSON(ALERT_URLS[i], function (d) { renderAlerts(parseAlerts(d)); },
       function () { loadAlerts(i + 1); });
   }
@@ -331,28 +396,29 @@
 
   function toMins(hhmm) { var p = String(hhmm).split(':'); return parseInt(p[0], 10) * 60 + parseInt(p[1], 10); }
 
-  function buildPrayerCells() {
-    var wrap = $('prayers'), html = '';
+  function pClass(i) { return 'p' + (PRAYERS[i].sun ? ' sun' : ''); }
+
+  function buildDock() {
+    var html = '';
     for (var i = 0; i < PRAYERS.length; i++) {
-      html += '<div class="card prayer' + (PRAYERS[i].sun ? ' sun' : '') + '" id="p' + i + '">' +
-        '<div class="n">' + PRAYERS[i].name + '</div><div class="t" id="pt' + i + '">--:--</div></div>';
+      html += '<div class="' + pClass(i) + '" id="p' + i + '"><div class="n">' + PRAYERS[i].name +
+        '</div><div class="t" id="pt' + i + '">--</div></div>';
     }
-    wrap.innerHTML = html;
+    $('dock').innerHTML = html;
   }
 
-  function setTimes(day, t, hijri, source) {
+  function setTimes(day, t, hijri) {
     times = t; times.day = day;
     for (var i = 0; i < PRAYERS.length; i++) setText($('pt' + i), fmt12(t[PRAYERS[i].key]));
-    setText($('hDate'), hijri ? '· ' + hijri : '');
+    setText($('hDate'), hijri || '');
     nextIdxShown = -1;
-    setStatus('p', source);
   }
 
   function loadPrayerTimes(now) {
     var day = dayKey(now);
     var y = now.getUTCFullYear(), m = now.getUTCMonth() + 1, d = now.getUTCDate();
     // نعرض الحساب المحلي فوراً ثم نستبدله بأوقات Aladhan (أم القرى) عند وصولها.
-    setTimes(day, computeTimes(y, m, d), '', 'أوقات الصلاة: حساب محلي');
+    setTimes(day, computeTimes(y, m, d), '');
     var url = 'https://api.aladhan.com/v1/timings/' + pad(d) + '-' + pad(m) + '-' + y +
       '?latitude=' + LAT + '&longitude=' + LON + '&method=4';
     getJSON(url, function (res) {
@@ -360,10 +426,11 @@
       var t = {}, src = res.data.timings;
       for (var i = 0; i < PRAYERS.length; i++) t[PRAYERS[i].key] = toMins(src[PRAYERS[i].key]);
       var h = res.data.date && res.data.date.hijri;
-      var hijri = h ? h.day + ' ' + h.month.ar + ' ' + h.year + 'هـ' : '';
-      setTimes(day, t, hijri, '');
+      setTimes(day, t, h ? parseInt(h.day, 10) + ' ' + h.month.ar + ' ' + h.year + ' هـ' : '');
     }, function () {});
   }
+
+  function prayerLabel(i) { return PRAYERS[i].sun ? 'الشروق' : PRAYERS[i].name; }
 
   function renderPrayers(now) {
     if (!times || times.day !== dayKey(now)) loadPrayerTimes(now);
@@ -377,9 +444,17 @@
     else target = Math.round(times[PRAYERS[next].key]) * 60;
 
     if (next !== nextIdxShown) {
-      if (nextIdxShown >= 0) $('p' + nextIdxShown).className = 'card prayer' + (PRAYERS[nextIdxShown].sun ? ' sun' : '');
-      $('p' + next).className = 'card prayer next';
-      setText($('nextName'), 'متبقٍ على ' + (PRAYERS[next].sun ? 'الشروق' : 'صلاة ' + PRAYERS[next].name));
+      if (nextIdxShown >= 0) $('p' + nextIdxShown).className = pClass(nextIdxShown);
+      $('p' + next).className = 'p next';
+      setText($('nextLabel'), PRAYERS[next].sun ? 'الشروق القادم' : 'الصلاة القادمة');
+      setText($('nextName'), prayerLabel(next));
+      setText($('nextTime'), fmt12(times[PRAYERS[next].key]));
+      var after = (next + 1) % PRAYERS.length, a = hm(times[PRAYERS[after].key]);
+      var afterNext = (after + 1) % PRAYERS.length;
+      setText($('afterName'), prayerLabel(after));
+      setText($('afterTime'), a[0]);
+      setText($('afterAmPm'), a[1] === 'ص' ? 'صباحاً' : 'مساءً');
+      setText($('afterSub'), 'ثم ' + prayerLabel(afterNext) + ' ' + fmt12(times[PRAYERS[afterNext].key]));
       nextIdxShown = next;
     }
     var left = target - secNow;
@@ -400,10 +475,12 @@
     setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
   }
 
-  buildPrayerCells();
+  buildDock();
   tick();
+  nextBackground();
   loadWeather();
   loadAlerts();
+  setInterval(nextBackground, BG_EVERY_MS);
   setInterval(loadWeather, WEATHER_EVERY_MS);
   setInterval(function () { loadAlerts(); }, ALERTS_EVERY_MS);
 })();
