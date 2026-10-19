@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>شاشة المدينة المنورة</title>
+<!--
+  شاشة تلفاز خفيفة: الوقت، الطقس، إنذارات المركز الوطني للأرصاد، أوقات الصلاة.
+  ملف واحد بلا مكتبات ولا صور ولا حركات CSS، لتقليل استهلاك الرام على متصفح التلفاز.
+  مكتوبة بـ ES5 + XMLHttpRequest لتعمل على متصفحات التلفزيونات القديمة.
+-->
+<style>
+  :root { --bg:#0b1220; --card:#131c2e; --line:#22304a; --text:#e8eef8; --muted:#8fa0bb; --accent:#3fb68b; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; background:var(--bg); color:var(--text);
+    font-family:"Segoe UI", Tahoma, Arial, sans-serif; overflow:hidden; }
+  body { display:flex; flex-direction:column; padding:2.2vw 3vw; gap:1.6vw; }
+  .row { display:flex; gap:1.6vw; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:1.2vw; padding:1.6vw 2vw; }
+  .muted { color:var(--muted); }
+
+  #top { flex:0 0 auto; }
+  #clockCard { flex:1.3; display:flex; flex-direction:column; justify-content:center; }
+  #clock { font-size:7.5vw; font-weight:700; line-height:1; direction:ltr; text-align:right; font-variant-numeric:tabular-nums; }
+  #dates { font-size:1.9vw; margin-top:0.8vw; }
+  #city { font-size:1.6vw; }
+
+  #weatherCard { flex:1; display:flex; align-items:center; gap:2vw; }
+  #wIcon { font-size:7vw; line-height:1; }
+  #wTemp { font-size:5.5vw; font-weight:700; direction:ltr; }
+  #wDesc { font-size:2vw; }
+  #wMore { font-size:1.5vw; margin-top:0.4vw; }
+
+  #alert { font-size:2vw; display:flex; align-items:center; gap:1.4vw; border-width:0.3vw; }
+  #alert .dot { width:2.2vw; height:2.2vw; border-radius:50%; flex:0 0 auto; background:var(--accent); }
+  #alertText b { font-size:2.2vw; }
+  #alertSub { font-size:1.4vw; margin-top:0.3vw; }
+  .lvl-yellow { border-color:#f2c200 !important; } .lvl-yellow .dot { background:#f2c200 !important; }
+  .lvl-orange { border-color:#ff8a00 !important; } .lvl-orange .dot { background:#ff8a00 !important; }
+  .lvl-red    { border-color:#e5322d !important; } .lvl-red .dot    { background:#e5322d !important; }
+  .lvl-none   { border-color:var(--accent) !important; }
+  .lvl-unknown{ border-color:var(--line) !important; } .lvl-unknown .dot { background:var(--muted) !important; }
+
+  #prayersWrap { flex:1 1 auto; display:flex; flex-direction:column; justify-content:flex-end; gap:1.6vw; min-height:0; }
+  #countdownCard { text-align:center; flex:1; display:flex; flex-direction:column; justify-content:center; }
+  #nextName { font-size:2.4vw; }
+  #countdown { font-size:5vw; font-weight:700; direction:ltr; font-variant-numeric:tabular-nums; color:var(--accent); line-height:1.1; }
+  .prayer { flex:1; text-align:center; padding:1vw 0.5vw; }
+  .prayer .n { font-size:2vw; }
+  .prayer .t { font-size:2.8vw; font-weight:700; direction:ltr; margin-top:0.4vw; font-variant-numeric:tabular-nums; }
+  .prayer.next { border-color:var(--accent); background:#163327; }
+  .prayer.sun .n, .prayer.sun .t { color:var(--muted); }
+  #status { font-size:1.1vw; text-align:center; }
+</style>
+</head>
+<body>
+
+<div id="top" class="row">
+  <div id="clockCard" class="card">
+    <div id="city" class="muted">🕌 المدينة المنورة</div>
+    <div id="clock">--:--:--</div>
+    <div id="dates"><span id="gDate"></span> <span id="hDate" class="muted"></span></div>
+  </div>
+  <div id="weatherCard" class="card">
+    <div id="wIcon">⏳</div>
+    <div>
+      <div id="wTemp">--°</div>
+      <div id="wDesc">جارٍ تحميل الطقس…</div>
+      <div id="wMore" class="muted"></div>
+    </div>
+  </div>
+</div>
+
+<div id="alert" class="card lvl-unknown">
+  <span class="dot"></span>
+  <div>
+    <div id="alertText"><b>جارٍ التحقق من إنذارات المركز الوطني للأرصاد…</b></div>
+    <div id="alertSub" class="muted"></div>
+  </div>
+</div>
+
+<div id="prayersWrap">
+  <div id="countdownCard" class="card">
+    <div id="nextName">الصلاة القادمة</div>
+    <div id="countdown">--:--:--</div>
+  </div>
+  <div id="prayers" class="row"></div>
+</div>
+
+<div id="status" class="muted"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================ SETTINGS ============================ */
+
+  var LAT = 24.4672, LON = 39.6111;   // المدينة المنورة
+  var TZ_OFFSET_H = 3;                 // توقيت السعودية UTC+3 بلا توقيت صيفي
+
+  var WEATHER_URL = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
+    '&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m' +
+    '&daily=temperature_2m_max,temperature_2m_min&timezone=Asia%2FRiyadh&forecast_days=1';
+
+  // واجهة إنذارات المركز الوطني للأرصاد (EWS API — GetNotifications).
+  // إن منعها متصفح التلفاز (CORS) يمكن وضع رابط وسيط هنا بدلاً منها.
+  var ALERT_URLS = [
+    'https://api.ncm.gov.sa/api/weather/getnotifications'
+  ];
+
+  var WEATHER_EVERY_MS = 15 * 60 * 1000;
+  var ALERTS_EVERY_MS = 10 * 60 * 1000;
+
+  var PRAYERS = [
+    { key: 'Fajr',    name: 'الفجر' },
+    { key: 'Sunrise', name: 'الشروق', sun: true },
+    { key: 'Dhuhr',   name: 'الظهر' },
+    { key: 'Asr',     name: 'العصر' },
+    { key: 'Maghrib', name: 'المغرب' },
+    { key: 'Isha',    name: 'العشاء' }
+  ];
+
+  /* ============================ HELPERS ============================ */
+
+  function $(id) { return document.getElementById(id); }
+
+  // يحدّث النص فقط إذا تغيّر، لتجنّب إعادة الرسم كل ثانية بلا داعٍ.
+  function setText(el, txt) { if (el.textContent !== txt) el.textContent = txt; }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  // وقت المدينة المنورة كـ Date "مُزاح" تُقرأ قيمه بدوال getUTC* — لا يعتمد على
+  // منطقة التلفاز الزمنية ولا على دعم Intl timeZone في المتصفحات القديمة.
+  function madinahNow() { return new Date(Date.now() + TZ_OFFSET_H * 3600000); }
+
+  function dayKey(d) { return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
+
+  function fmt12(mins) {
+    var h = Math.floor(mins / 60) % 24, m = Math.round(mins % 60);
+    if (m === 60) { h = (h + 1) % 24; m = 0; }
+    var suffix = h < 12 ? 'ص' : 'م';
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ':' + pad(m) + ' ' + suffix;
+  }
+
+  function getJSON(url, ok, fail) {
+    var x = new XMLHttpRequest();
+    x.open('GET', url, true);
+    x.timeout = 20000;
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      if (x.status >= 200 && x.status < 300) {
+        var data;
+        try { data = JSON.parse(x.responseText); } catch (e) { fail('bad json'); return; }
+        ok(data);
+      } else { fail('http ' + x.status); }
+      x = null;
+    };
+    x.ontimeout = function () { fail('timeout'); };
+    x.send();
+  }
+
+  var statusParts = {};
+  function setStatus(part, txt) {
+    statusParts[part] = txt;
+    var out = [];
+    for (var k in statusParts) if (statusParts[k]) out.push(statusParts[k]);
+    setText($('status'), out.join(' · '));
+  }
+
+  /* ============================ CLOCK ============================ */
+
+  var G_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  var DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+  function renderClock(now) {
+    var h = now.getUTCHours(), h12 = h % 12 || 12;
+    setText($('clock'), h12 + ':' + pad(now.getUTCMinutes()) + ':' + pad(now.getUTCSeconds()) + (h < 12 ? ' ص' : ' م'));
+    setText($('gDate'), DAYS[now.getUTCDay()] + ' ' + now.getUTCDate() + ' ' + G_MONTHS[now.getUTCMonth()] + ' ' + now.getUTCFullYear());
+  }
+
+  /* ============================ WEATHER ============================ */
+
+  // رموز WMO المستخدمة في Open-Meteo
+  function weatherInfo(code) {
+    if (code === 0) return ['☀️', 'صحو'];
+    if (code === 1) return ['🌤️', 'غائم جزئياً'];
+    if (code === 2) return ['⛅', 'غائم جزئياً'];
+    if (code === 3) return ['☁️', 'غائم'];
+    if (code === 45 || code === 48) return ['🌫️', 'ضباب'];
+    if (code >= 51 && code <= 57) return ['🌦️', 'رذاذ'];
+    if (code >= 61 && code <= 67) return ['🌧️', 'أمطار'];
+    if (code >= 71 && code <= 77) return ['🌨️', 'ثلوج'];
+    if (code >= 80 && code <= 82) return ['🌧️', 'زخات مطر'];
+    if (code >= 95) return ['⛈️', 'عواصف رعدية'];
+    return ['🌡️', '—'];
+  }
+
+  function loadWeather() {
+    getJSON(WEATHER_URL, function (d) {
+      var c = d.current || {}, daily = d.daily || {};
+      var info = weatherInfo(c.weather_code);
+      setText($('wIcon'), info[0]);
+      setText($('wTemp'), Math.round(c.temperature_2m) + '°C');
+      setText($('wDesc'), info[1] + ' · المحسوسة ' + Math.round(c.apparent_temperature) + '°');
+      var more = 'الرطوبة ' + c.relative_humidity_2m + '% · الرياح ' + Math.round(c.wind_speed_10m) + ' كم/س';
+      if (daily.temperature_2m_max) more += ' · العظمى ' + Math.round(daily.temperature_2m_max[0]) + '° الصغرى ' + Math.round(daily.temperature_2m_min[0]) + '°';
+      setText($('wMore'), more);
+      setStatus('w', '');
+    }, function () { setStatus('w', 'تعذّر تحديث الطقس'); });
+  }
+
+  /* ============================ NCM ALERTS ============================ */
+
+  var MADINAH_RE = /المدينة|madina|medina/i;
+
+  function levelOf(text) {
+    if (/red|أحمر|حمراء/i.test(text)) return 'red';
+    if (/orange|برتقالي/i.test(text)) return 'orange';
+    if (/yellow|أصفر|صفراء/i.test(text)) return 'yellow';
+    return '';
+  }
+  var LEVEL_NAME = { red: 'أحمر', orange: 'برتقالي', yellow: 'أصفر' };
+  var LEVEL_RANK = { red: 3, orange: 2, yellow: 1, '': 0 };
+
+  // أول قيمة نصية لحقل يطابق اسمه النمط (بحث مسطّح في الكائن).
+  function pick(obj, re) {
+    for (var k in obj) {
+      if (re.test(k) && obj[k] != null && typeof obj[k] !== 'object' && String(obj[k]) !== '') return String(obj[k]);
+    }
+    return '';
+  }
+
+  function toList(d) {
+    if (d && d.length !== undefined) return d;
+    if (d && typeof d === 'object') {
+      for (var k in d) if (d[k] && d[k].length !== undefined && typeof d[k] !== 'string') return d[k];
+    }
+    return [];
+  }
+
+  function parseAlerts(data) {
+    var list = toList(data), out = [];
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (!a || typeof a !== 'object') continue;
+      var json = JSON.stringify(a);
+      if (!MADINAH_RE.test(json)) continue;
+      var colorField = pick(a, /colou?r|level|severity|لون/i);
+      out.push({
+        level: levelOf(colorField) || levelOf(json),
+        type: pick(a, /^(alert)?(type|event|phenomen)|eventName|alertType|alertName|nameAr|titleAr|title/i) || 'تنبيه جوي',
+        desc: pick(a, /descriptionAr|description|desc|message|text/i),
+        until: pick(a, /to_?date|end|expir|until/i)
+      });
+    }
+    out.sort(function (x, y) { return LEVEL_RANK[y.level] - LEVEL_RANK[x.level]; });
+    return out;
+  }
+
+  function renderAlerts(alerts) {
+    var box = $('alert');
+    if (!alerts.length) {
+      box.className = 'card lvl-none';
+      setText($('alertText'), '✅ لا توجد إنذارات من المركز الوطني للأرصاد على المدينة المنورة');
+      setText($('alertSub'), '');
+      return;
+    }
+    var top = alerts[0];
+    box.className = 'card lvl-' + (top.level || 'unknown');
+    var color = top.level ? 'إنذار ' + LEVEL_NAME[top.level] : 'إنذار';
+    $('alertText').innerHTML = '';
+    var b = document.createElement('b');
+    b.textContent = '⚠️ ' + color + ' — ' + top.type;
+    $('alertText').appendChild(b);
+    var sub = top.desc || '';
+    if (top.until) sub += (sub ? ' · ' : '') + 'حتى ' + top.until;
+    if (alerts.length > 1) sub += (sub ? ' · ' : '') + '(+' + (alerts.length - 1) + ' إنذارات أخرى)';
+    if (sub.length > 220) sub = sub.slice(0, 217) + '…';
+    setText($('alertSub'), sub);
+  }
+
+  function loadAlerts(i) {
+    i = i || 0;
+    if (i >= ALERT_URLS.length) {
+      var box = $('alert');
+      box.className = 'card lvl-unknown';
+      setText($('alertText'), 'تعذّر الاتصال بخدمة إنذارات المركز الوطني للأرصاد');
+      setText($('alertSub'), 'تحقق يدوياً من ncm.gov.sa — ستتم المحاولة مجدداً تلقائياً');
+      return;
+    }
+    getJSON(ALERT_URLS[i], function (d) { renderAlerts(parseAlerts(d)); },
+      function () { loadAlerts(i + 1); });
+  }
+
+  /* ============================ PRAYER TIMES ============================ */
+
+  var times = null;        // { day:'YYYY-MM-DD', Fajr: دقائق منذ منتصف الليل, ... }
+  var nextIdxShown = -1;
+
+  // حساب محلي احتياطي بطريقة أم القرى (الفجر 18.5°، العشاء بعد المغرب بـ 90 دقيقة،
+  // العصر الشافعي) — يُستخدم إن تعذّر الاتصال بـ Aladhan، بدقة دقيقة تقريباً.
+  function computeTimes(y, mo, d) {
+    var rad = Math.PI / 180;
+    var jd = Date.UTC(y, mo - 1, d, 12) / 86400000 + 2440587.5 - LON / 360;
+    var n = jd - 2451545.0;
+    var g = (357.529 + 0.98560028 * n) * rad;
+    var q = 280.459 + 0.98564736 * n;
+    var L = (q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+    var e = (23.439 - 0.00000036 * n) * rad;
+    var ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)) / rad / 15;
+    var decl = Math.asin(Math.sin(e) * Math.sin(L));
+    var eqt = q / 15 - ra; eqt = eqt - 24 * Math.round(eqt / 24);
+    var noon = 12 + TZ_OFFSET_H - LON / 15 - eqt;   // ساعات بالتوقيت المحلي
+    var lat = LAT * rad;
+    function hourAngle(alt) {
+      return Math.acos((Math.sin(alt) - Math.sin(lat) * Math.sin(decl)) / (Math.cos(lat) * Math.cos(decl))) / rad / 15;
+    }
+    var sunAlt = -0.833 * rad;
+    var asrAlt = Math.atan(1 / (1 + Math.tan(Math.abs(lat - decl))));
+    var maghrib = noon + hourAngle(sunAlt);
+    return {
+      Fajr: (noon - hourAngle(-18.5 * rad)) * 60,
+      Sunrise: (noon - hourAngle(sunAlt)) * 60,
+      Dhuhr: noon * 60 + 1,
+      Asr: (noon + hourAngle(asrAlt)) * 60,
+      Maghrib: maghrib * 60,
+      Isha: maghrib * 60 + 90
+    };
+  }
+
+  function toMins(hhmm) { var p = String(hhmm).split(':'); return parseInt(p[0], 10) * 60 + parseInt(p[1], 10); }
+
+  function buildPrayerCells() {
+    var wrap = $('prayers'), html = '';
+    for (var i = 0; i < PRAYERS.length; i++) {
+      html += '<div class="card prayer' + (PRAYERS[i].sun ? ' sun' : '') + '" id="p' + i + '">' +
+        '<div class="n">' + PRAYERS[i].name + '</div><div class="t" id="pt' + i + '">--:--</div></div>';
+    }
+    wrap.innerHTML = html;
+  }
+
+  function setTimes(day, t, hijri, source) {
+    times = t; times.day = day;
+    for (var i = 0; i < PRAYERS.length; i++) setText($('pt' + i), fmt12(t[PRAYERS[i].key]));
+    setText($('hDate'), hijri ? '· ' + hijri : '');
+    nextIdxShown = -1;
+    setStatus('p', source);
+  }
+
+  function loadPrayerTimes(now) {
+    var day = dayKey(now);
+    var y = now.getUTCFullYear(), m = now.getUTCMonth() + 1, d = now.getUTCDate();
+    // نعرض الحساب المحلي فوراً ثم نستبدله بأوقات Aladhan (أم القرى) عند وصولها.
+    setTimes(day, computeTimes(y, m, d), '', 'أوقات الصلاة: حساب محلي');
+    var url = 'https://api.aladhan.com/v1/timings/' + pad(d) + '-' + pad(m) + '-' + y +
+      '?latitude=' + LAT + '&longitude=' + LON + '&method=4';
+    getJSON(url, function (res) {
+      if (!res || !res.data || !res.data.timings || dayKey(madinahNow()) !== day) return;
+      var t = {}, src = res.data.timings;
+      for (var i = 0; i < PRAYERS.length; i++) t[PRAYERS[i].key] = toMins(src[PRAYERS[i].key]);
+      var h = res.data.date && res.data.date.hijri;
+      var hijri = h ? h.day + ' ' + h.month.ar + ' ' + h.year + 'هـ' : '';
+      setTimes(day, t, hijri, '');
+    }, function () {});
+  }
+
+  function renderPrayers(now) {
+    if (!times || times.day !== dayKey(now)) loadPrayerTimes(now);
+    var secNow = now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds();
+    var next = -1;
+    for (var i = 0; i < PRAYERS.length; i++) {
+      if (Math.round(times[PRAYERS[i].key]) * 60 > secNow) { next = i; break; }
+    }
+    var target;
+    if (next === -1) { next = 0; target = Math.round(times.Fajr) * 60 + 86400; }  // فجر الغد (تقريبي بفارق دقيقة)
+    else target = Math.round(times[PRAYERS[next].key]) * 60;
+
+    if (next !== nextIdxShown) {
+      if (nextIdxShown >= 0) $('p' + nextIdxShown).className = 'card prayer' + (PRAYERS[nextIdxShown].sun ? ' sun' : '');
+      $('p' + next).className = 'card prayer next';
+      setText($('nextName'), 'متبقٍ على ' + (PRAYERS[next].sun ? 'الشروق' : 'صلاة ' + PRAYERS[next].name));
+      nextIdxShown = next;
+    }
+    var left = target - secNow;
+    setText($('countdown'), pad(Math.floor(left / 3600)) + ':' + pad(Math.floor(left / 60) % 60) + ':' + pad(left % 60));
+  }
+
+  /* ============================ MAIN LOOP ============================ */
+
+  var startedDay = dayKey(madinahNow());
+
+  function tick() {
+    var now = madinahNow();
+    renderClock(now);
+    renderPrayers(now);
+    // إعادة تحميل يومية الساعة 3 فجراً لتفريغ ذاكرة متصفح التلفاز من أي تراكم.
+    if (dayKey(now) !== startedDay && now.getUTCHours() === 3) { location.reload(); return; }
+    // مؤقت واحد يُضبط على بداية الثانية التالية بدل setInterval.
+    setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
+  }
+
+  buildPrayerCells();
+  tick();
+  loadWeather();
+  loadAlerts();
+  setInterval(loadWeather, WEATHER_EVERY_MS);
+  setInterval(function () { loadAlerts(); }, ALERTS_EVERY_MS);
+})();
+</script>
+</body>
+</html>
