@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>شاشة المدينة المنورة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05080d;
+    --fg: #e8edf3;
+    --muted: #7d8898;
+    --line: #1c2430;
+    --accent: #4fc3a1;
+    --yellow: #f4c430;
+    --orange: #ff8c1a;
+    --red: #e53935;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; cursor: none; }
+  body { font-family: "Tajawal", system-ui, sans-serif; }
+
+  /* المحتوى يتحرك ببطء لحماية الشاشة من الاحتراق */
+  #stage {
+    position: absolute; inset: 4vh 4vw;
+    display: grid; grid-template-rows: auto 1fr auto; gap: 3vh;
+    transition: transform 20s ease-in-out;
+  }
+
+  header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .clock { font-size: 15vh; font-weight: 300; line-height: 1; letter-spacing: .02em; font-variant-numeric: tabular-nums; direction: ltr; }
+  .clock small { font-size: 5vh; color: var(--muted); margin-inline-start: 1vw; }
+  .date { font-size: 3.2vh; color: var(--muted); margin-top: 1.5vh; }
+  .city { font-size: 3.2vh; color: var(--accent); margin-bottom: 1vh; }
+
+  .weather { text-align: left; }
+  .temp { font-size: 11vh; font-weight: 300; line-height: 1; direction: ltr; }
+  .wdesc { font-size: 3.4vh; margin-top: 1vh; }
+  .wmeta { font-size: 2.4vh; color: var(--muted); margin-top: .8vh; }
+
+  main { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2vh; }
+  .next-label { font-size: 3.4vh; color: var(--muted); }
+  .next-name { font-size: 7vh; font-weight: 700; }
+  .countdown { font-size: 12vh; font-weight: 300; font-variant-numeric: tabular-nums; direction: ltr; color: var(--accent); }
+
+  #alert {
+    display: none; width: 100%; max-width: 80vw;
+    border-radius: 2vh; padding: 2vh 3vw;
+    border: .4vh solid var(--alert-color, var(--yellow));
+    background: color-mix(in srgb, var(--alert-color, var(--yellow)) 14%, transparent);
+  }
+  #alert.show { display: block; }
+  #alert .head { display: flex; align-items: center; gap: 1.5vw; font-size: 3.6vh; font-weight: 700; }
+  #alert .dot { width: 3vh; height: 3vh; border-radius: 50%; background: var(--alert-color, var(--yellow)); flex: none; }
+  #alert .body { font-size: 2.6vh; margin-top: 1vh; color: var(--fg); opacity: .9; }
+  #alert .more { font-size: 2.2vh; margin-top: .6vh; color: var(--muted); }
+  #noalert { font-size: 2.4vh; color: var(--muted); }
+
+  footer { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1vw; }
+  .p { border-top: .3vh solid var(--line); padding-top: 1.5vh; text-align: center; }
+  .p .n { font-size: 2.8vh; color: var(--muted); }
+  .p .t { font-size: 4.2vh; margin-top: .5vh; font-variant-numeric: tabular-nums; direction: ltr; }
+  .p.next { border-top-color: var(--accent); }
+  .p.next .n, .p.next .t { color: var(--accent); }
+  .p.sun .t { opacity: .7; }
+
+  #status { position: absolute; bottom: 1vh; left: 1vw; font-size: 1.6vh; color: var(--muted); opacity: .6; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <header>
+    <div>
+      <div class="city">المدينة المنورة</div>
+      <div class="clock" id="clock">--:--<small id="sec">--</small></div>
+      <div class="date" id="date"></div>
+    </div>
+    <div class="weather">
+      <div class="temp" id="temp">--°</div>
+      <div class="wdesc" id="wdesc">جارٍ تحميل الطقس…</div>
+      <div class="wmeta" id="wmeta"></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="next-label">الصلاة القادمة</div>
+    <div class="next-name" id="nextName">—</div>
+    <div class="countdown" id="countdown">--:--:--</div>
+    <div id="alert">
+      <div class="head"><span class="dot"></span><span id="alertTitle"></span></div>
+      <div class="body" id="alertBody"></div>
+      <div class="more" id="alertMore"></div>
+    </div>
+    <div id="noalert">لا توجد تنبيهات من المركز الوطني للأرصاد على المدينة المنورة</div>
+  </main>
+
+  <footer id="prayers"></footer>
+</div>
+<div id="status"></div>
+
+<script>
+// ===== الإعدادات =====
+const params = new URLSearchParams(location.search);
+const LAT = 24.4672, LON = 39.6111;
+const TZ = "Asia/Riyadh";
+const TZ_OFFSET_MS = 3 * 3600 * 1000; // السعودية UTC+3 بدون توقيت صيفي
+// موجز تنبيهات CAP الرسمي للمركز الوطني للأرصاد (مسجل لدى WMO)
+const NCM_FEED = params.get("feed") || "https://ncm.gov.sa/ar/cap-alerts";
+// متصفح التلفزيون قد يمنع الطلب بسبب CORS؛ يمكن تمرير وسيط مثل ?proxy=https://your-proxy/?url=
+const PROXY = params.get("proxy") || "";
+const AREA_KEYWORDS = ["المدينة المنورة", "المدينة", "Madinah", "Medina", "Al Madinah"];
+
+const PRAYERS = [
+  ["Fajr", "الفجر"], ["Sunrise", "الشروق"], ["Dhuhr", "الظهر"],
+  ["Asr", "العصر"], ["Maghrib", "المغرب"], ["Isha", "العشاء"],
+];
+
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const status = {};
+function setStatus(k, v) { status[k] = v; $("status").textContent = Object.values(status).filter(Boolean).join(" · "); }
+
+function store(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+function load(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } }
+
+// تاريخ "اليوم" بتوقيت الرياض
+function riyadhParts(ms = Date.now()) {
+  const d = new Date(ms + TZ_OFFSET_MS);
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() };
+}
+function dayKey(p) { return `${pad(p.d)}-${pad(p.m)}-${p.y}`; }
+
+// ===== الساعة =====
+function tickClock() {
+  const now = new Date();
+  const t = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).formatToParts(now);
+  const get = type => t.find(x => x.type === type).value;
+  $("clock").firstChild.nodeValue = `${get("hour")}:${get("minute")}`;
+  $("sec").textContent = get("second");
+  const greg = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now);
+  const hijri = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", { timeZone: TZ, day: "numeric", month: "long", year: "numeric" }).format(now);
+  $("date").textContent = `${greg} · ${hijri}`;
+}
+
+// ===== أوقات الصلاة (أم القرى) =====
+const timingsCache = {};
+async function getTimings(p) {
+  const key = dayKey(p);
+  if (timingsCache[key]) return timingsCache[key];
+  const saved = load("pt-" + key);
+  if (saved) return (timingsCache[key] = saved);
+  const r = await fetch(`https://api.aladhan.com/v1/timings/${key}?latitude=${LAT}&longitude=${LON}&method=4`);
+  const j = await r.json();
+  const t = {};
+  for (const [k] of PRAYERS) t[k] = j.data.timings[k].slice(0, 5);
+  store("pt-" + key, t);
+  return (timingsCache[key] = t);
+}
+function toMs(p, hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
+  return Date.UTC(p.y, p.m - 1, p.d, h, m) - TZ_OFFSET_MS;
+}
+
+let today = null, todayT = null, tomorrowT = null, tomorrowP = null;
+async function refreshPrayers() {
+  try {
+    today = riyadhParts();
+    tomorrowP = riyadhParts(Date.now() + 86400000);
+    todayT = await getTimings(today);
+    tomorrowT = await getTimings(tomorrowP);
+    renderPrayers();
+    setStatus("pt", "");
+  } catch (e) {
+    setStatus("pt", "تعذر تحميل أوقات الصلاة");
+  }
+}
+function nextPrayer() {
+  const now = Date.now();
+  for (const [k, ar] of PRAYERS) {
+    if (k === "Sunrise") continue;
+    const ms = toMs(today, todayT[k]);
+    if (ms > now) return { k, ar, ms };
+  }
+  return { k: "Fajr", ar: "الفجر", ms: toMs(tomorrowP, tomorrowT.Fajr), tomorrow: true };
+}
+function renderPrayers() {
+  const nx = nextPrayer();
+  $("prayers").innerHTML = PRAYERS.map(([k, ar]) => {
+    const cls = ["p", k === "Sunrise" ? "sun" : "", (!nx.tomorrow && k === nx.k) ? "next" : ""].join(" ");
+    return `<div class="${cls}"><div class="n">${ar}</div><div class="t">${todayT[k]}</div></div>`;
+  }).join("");
+}
+function tickCountdown() {
+  if (!todayT || !tomorrowT) return;
+  if (dayKey(riyadhParts()) !== dayKey(today)) { refreshPrayers(); return; }
+  const nx = nextPrayer();
+  const left = Math.max(0, Math.floor((nx.ms - Date.now()) / 1000));
+  $("nextName").textContent = nx.ar + (nx.tomorrow ? " (غداً)" : "");
+  $("countdown").textContent = `${pad(Math.floor(left / 3600))}:${pad(Math.floor(left % 3600 / 60))}:${pad(left % 60)}`;
+  if (left === 0) setTimeout(renderPrayers, 1500);
+}
+
+// ===== الطقس (Open-Meteo) =====
+const WMO = {
+  0: "صحو", 1: "صحو غالباً", 2: "غائم جزئياً", 3: "غائم",
+  45: "ضباب", 48: "ضباب متجمد", 51: "رذاذ خفيف", 53: "رذاذ", 55: "رذاذ كثيف",
+  61: "أمطار خفيفة", 63: "أمطار", 65: "أمطار غزيرة", 66: "أمطار متجمدة", 67: "أمطار متجمدة غزيرة",
+  71: "ثلوج خفيفة", 73: "ثلوج", 75: "ثلوج كثيفة", 77: "حبيبات ثلجية",
+  80: "زخات مطر", 81: "زخات مطر متوسطة", 82: "زخات مطر غزيرة",
+  95: "عواصف رعدية", 96: "عواصف رعدية مع برد", 99: "عواصف رعدية مع برد كثيف",
+};
+async function refreshWeather() {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
+      `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m` +
+      `&daily=temperature_2m_max,temperature_2m_min&timezone=${encodeURIComponent(TZ)}&forecast_days=1`;
+    const j = await (await fetch(url)).json();
+    const c = j.current;
+    $("temp").textContent = `${Math.round(c.temperature_2m)}°`;
+    $("wdesc").textContent = WMO[c.weather_code] || "—";
+    $("wmeta").textContent = `العظمى ${Math.round(j.daily.temperature_2m_max[0])}° · الصغرى ${Math.round(j.daily.temperature_2m_min[0])}° · ` +
+      `الرطوبة ${c.relative_humidity_2m}% · الرياح ${Math.round(c.wind_speed_10m)} كم/س`;
+    setStatus("w", "");
+  } catch (e) {
+    setStatus("w", "تعذر تحميل الطقس");
+  }
+}
+
+// ===== تنبيهات المركز الوطني للأرصاد (CAP) =====
+const COLORS = {
+  red: { css: "var(--red)", ar: "أحمر" },
+  orange: { css: "var(--orange)", ar: "برتقالي" },
+  yellow: { css: "var(--yellow)", ar: "أصفر" },
+};
+function fetchText(url) {
+  return fetch(PROXY ? PROXY + encodeURIComponent(url) : url).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); });
+}
+const xml = s => new DOMParser().parseFromString(s, "application/xml");
+const txt = (node, tag) => { const el = node.getElementsByTagNameNS("*", tag)[0]; return el ? el.textContent.trim() : ""; };
+
+function alertColor(info) {
+  // المركز يصنف التنبيهات بالألوان؛ نبحث عن اللون في النص أو المعاملات، وإلا نستنتجه من الشدة
+  const hay = [txt(info, "event"), txt(info, "headline"), txt(info, "description"),
+    ...[...info.getElementsByTagNameNS("*", "parameter")].map(p => p.textContent)].join(" ").toLowerCase();
+  if (/أحمر|حمراء|\bred\b/.test(hay)) return COLORS.red;
+  if (/برتقالي|\borange\b/.test(hay)) return COLORS.orange;
+  if (/أصفر|صفراء|\byellow\b/.test(hay)) return COLORS.yellow;
+  const sev = txt(info, "severity");
+  if (sev === "Extreme") return COLORS.red;
+  if (sev === "Severe") return COLORS.orange;
+  return COLORS.yellow;
+}
+function pickInfo(capDoc) {
+  const infos = [...capDoc.getElementsByTagNameNS("*", "info")];
+  return infos.find(i => (txt(i, "language") || "").startsWith("ar")) || infos[0];
+}
+function coversMadinah(info) {
+  const areas = [...info.getElementsByTagNameNS("*", "areaDesc")].map(a => a.textContent).join(" ");
+  return AREA_KEYWORDS.some(k => areas.includes(k));
+}
+
+async function refreshAlerts() {
+  try {
+    const feed = xml(await fetchText(NCM_FEED));
+    const items = [...feed.getElementsByTagName("item"), ...feed.getElementsByTagNameNS("*", "entry")];
+    const now = Date.now();
+    const found = [];
+    for (const it of items.slice(0, 30)) {
+      // بعض الموجزات تضمّن CAP مباشرة، وبعضها يضع رابطاً له
+      let cap = it.getElementsByTagNameNS("*", "alert")[0] ? it : null;
+      if (!cap) {
+        const linkEl = it.getElementsByTagName("link")[0];
+        const link = linkEl && (linkEl.getAttribute("href") || linkEl.textContent.trim());
+        if (!link) continue;
+        try { cap = xml(await fetchText(link)); } catch (e) { continue; }
+      }
+      if (txt(cap, "msgType") === "Cancel") continue;
+      const info = pickInfo(cap);
+      if (!info || !coversMadinah(info)) continue;
+      const exp = Date.parse(txt(info, "expires"));
+      if (exp && exp < now) continue;
+      found.push(info);
+    }
+    showAlert(found);
+    setStatus("a", "");
+  } catch (e) {
+    setStatus("a", "تعذر الوصول لتنبيهات الأرصاد");
+  }
+}
+function showAlert(infos) {
+  const box = $("alert");
+  if (!infos.length) { box.classList.remove("show"); $("noalert").style.display = ""; return; }
+  const rank = c => c === COLORS.red ? 3 : c === COLORS.orange ? 2 : 1;
+  infos.sort((a, b) => rank(alertColor(b)) - rank(alertColor(a)));
+  const info = infos[0], color = alertColor(info);
+  box.style.setProperty("--alert-color", color.css);
+  $("alertTitle").textContent = `تنبيه ${color.ar}: ${txt(info, "event") || txt(info, "headline")}`;
+  $("alertBody").textContent = txt(info, "headline") || txt(info, "description");
+  const exp = Date.parse(txt(info, "expires"));
+  const until = exp ? "حتى " + new Intl.DateTimeFormat("ar-SA-u-nu-latn", { timeZone: TZ, weekday: "long", hour: "2-digit", minute: "2-digit" }).format(exp) : "";
+  $("alertMore").textContent = [until, infos.length > 1 ? `و ${infos.length - 1} تنبيه آخر` : ""].filter(Boolean).join(" · ");
+  box.classList.add("show");
+  $("noalert").style.display = "none";
+}
+
+// ===== حماية الشاشة من الاحتراق =====
+function drift() {
+  const x = (Math.random() - .5) * 2, y = (Math.random() - .5) * 2;
+  $("stage").style.transform = `translate(${x}vw, ${y}vh)`;
+}
+
+// ===== التشغيل =====
+tickClock();
+refreshPrayers().then(tickCountdown);
+refreshWeather();
+refreshAlerts();
+setInterval(() => { tickClock(); tickCountdown(); }, 1000);
+setInterval(refreshWeather, 15 * 60 * 1000);
+setInterval(refreshAlerts, 10 * 60 * 1000);
+setInterval(drift, 60 * 1000);
+// إعادة تحميل يومية لتجنب أي تسريب في متصفح التلفزيون
+setTimeout(() => location.reload(), 24 * 3600 * 1000);
+</script>
+</body>
+</html>
