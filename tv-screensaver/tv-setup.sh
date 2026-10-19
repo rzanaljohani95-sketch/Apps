@@ -37,6 +37,28 @@ get() { A shell settings get "${1%%:*}" "${1#*:}" | tr -d '\r'; }
 echo "الاتصال بالتلفاز $TARGET ..."
 adb connect "$TARGET" | tr -d '\r'
 if ! A get-state >/dev/null 2>&1; then
+  # المنفذ 5555 لم ينجح: ابحث عن منفذ "تصحيح الأخطاء اللاسلكي" الذي يعلنه التلفاز عبر mDNS
+  IP=${TARGET%%:*}
+  PORT=$(adb mdns services 2>/dev/null | tr -d '\r' | grep '_adb-tls-connect' | grep -o "$IP:[0-9]*" | head -1 | cut -d: -f2 || true)
+  if [ -z "$PORT" ]; then
+    echo
+    echo "لم يُعثر على منفذ تصحيح الأخطاء اللاسلكي تلقائياً."
+    echo "افتح على التلفاز: الإعدادات ← النظام ← خيارات المطوّر ← تصحيح الأخطاء اللاسلكي، واكتب المنفذ الظاهر بجانب عنوان IP"
+    read -r -p "  المنفذ (أو Enter للإلغاء): " PORT <"${CONFIRM_FROM:-/dev/tty}" || PORT=
+  fi
+  if [ -n "$PORT" ]; then
+    TARGET=$IP:$PORT
+    echo "المحاولة على $TARGET ..."
+    adb connect "$TARGET" | tr -d '\r'
+    if ! A get-state >/dev/null 2>&1; then
+      echo
+      echo "يلزم الاقتران أولاً: في نفس الشاشة على التلفاز اختر \"إقران الجهاز باستخدام رمز\"."
+      read -r -p "  منفذ الاقتران الظاهر (غير منفذ الاتصال): " PPORT <"${CONFIRM_FROM:-/dev/tty}" || PPORT=
+      [ -n "$PPORT" ] && adb pair "$IP:$PPORT" </dev/tty && adb connect "$TARGET" | tr -d '\r'
+    fi
+  fi
+fi
+if ! A get-state >/dev/null 2>&1; then
   cat <<MSG
 تعذّر الاتصال. تأكد من:
   - أن التلفاز والكمبيوتر على نفس الشبكة، وأن "تصحيح الأخطاء عبر USB/الشبكة" مفعّل في خيارات المطوّر.
