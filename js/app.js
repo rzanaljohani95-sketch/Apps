@@ -538,21 +538,23 @@
 
   /* ---------- daily goal status (calories / protein) ---------- */
 
-  function computeGoalStatus(value, goal, marginPct) {
+  function computeGoalStatus(value, goal, marginPct, overIsGood) {
     if (value === null || value === undefined || !goal) return null;
     const margin = goal * (marginPct / 100);
     const diff = round1(value - goal);
     if (diff === 0) return { state: 'exact', diff };
-    if (value > goal + margin) return { state: 'over', diff };
+    if (value > goal + margin) return { state: overIsGood ? 'overOk' : 'over', diff };
     if (value < goal - margin) return { state: 'under', diff };
     return { state: 'met', diff };
   }
 
   const GOAL_STATUS_CONFIG = {
-    exact: { icon: '🎯', cls: 'good', text: goal => `بالضبط على الهدف (${goal})` },
-    met:   { icon: '✅', cls: 'good', text: () => 'ضمن الهدف' },
-    over:  { icon: '⬆️', cls: 'bad', text: (goal, diff, unit) => `فوق الهدف بـ ${round1(Math.abs(diff))} ${unit}` },
-    under: { icon: '⬇️', cls: 'bad', text: (goal, diff, unit) => `أقل من الهدف بـ ${round1(Math.abs(diff))} ${unit}` },
+    exact:  { icon: '🎯', cls: 'good', text: goal => `بالضبط على الهدف (${goal})` },
+    met:    { icon: '✅', cls: 'good', text: () => 'ضمن الهدف' },
+    // Protein above goal isn't flagged as a problem — only a real shortfall is.
+    overOk: { icon: '✅', cls: 'good', text: (goal, diff, unit) => `فوق الهدف بـ ${round1(Math.abs(diff))} ${unit}` },
+    over:   { icon: '⬆️', cls: 'bad', text: (goal, diff, unit) => `فوق الهدف بـ ${round1(Math.abs(diff))} ${unit}` },
+    under:  { icon: '⬇️', cls: 'bad', text: (goal, diff, unit) => `أقل من الهدف بـ ${round1(Math.abs(diff))} ${unit}` },
   };
 
   function goalBadgeHtml(status, unit, goal, compact) {
@@ -615,7 +617,7 @@
     const cal = numOrNull(caloriesInput.value);
     const prot = numOrNull(proteinInput.value);
     const calStatus = computeGoalStatus(cal, state.settings.calorieGoal, state.settings.calorieMarginPct);
-    const protStatus = computeGoalStatus(prot, state.settings.proteinGoal, state.settings.proteinMarginPct);
+    const protStatus = computeGoalStatus(prot, state.settings.proteinGoal, state.settings.proteinMarginPct, true);
     document.getElementById('caloriesBadge').innerHTML = goalBadgeHtml(calStatus, 'سعرة', state.settings.calorieGoal);
     document.getElementById('proteinBadge').innerHTML = goalBadgeHtml(protStatus, 'جم', state.settings.proteinGoal);
   }
@@ -634,6 +636,7 @@
     document.getElementById('workoutDurationHours').value = totalMin !== null ? Math.floor(totalMin / 60) : '';
     document.getElementById('workoutDurationMinutes').value = totalMin !== null ? totalMin % 60 : '';
     document.getElementById('workoutNotes').value = w?.notes ?? '';
+    document.getElementById('workoutHiit').checked = !!w?.hiit;
     // A day with no saved entry yet inherits the previous day's period
     // state, so marking "on period" once carries forward automatically
     // instead of needing a fresh tap every day — the viewer only needs to
@@ -727,6 +730,7 @@
           type: document.getElementById('workoutType').value.trim(),
           duration: readWorkoutDurationMinutes(),
           notes: document.getElementById('workoutNotes').value.trim(),
+          hiit: document.getElementById('workoutHiit').checked,
         },
         onPeriod: onPeriodInput.checked,
       };
@@ -873,7 +877,7 @@
     const proteinAvg = avg(nums('protein'));
 
     const calAvgStatus = computeGoalStatus(calAvg, state.settings.calorieGoal, state.settings.calorieMarginPct);
-    const proteinAvgStatus = computeGoalStatus(proteinAvg, state.settings.proteinGoal, state.settings.proteinMarginPct);
+    const proteinAvgStatus = computeGoalStatus(proteinAvg, state.settings.proteinGoal, state.settings.proteinMarginPct, true);
 
     const statsEl = document.getElementById('weeklyStats');
     statsEl.innerHTML = `
@@ -940,7 +944,7 @@
 
   function proteinCellHtml(value) {
     if (value === null || value === undefined) return '—';
-    const status = computeGoalStatus(value, state.settings.proteinGoal, state.settings.proteinMarginPct);
+    const status = computeGoalStatus(value, state.settings.proteinGoal, state.settings.proteinMarginPct, true);
     return `${value}${goalBadgeHtml(status, 'جم', state.settings.proteinGoal, true)}`;
   }
 
@@ -970,7 +974,7 @@
     tbody.innerHTML = dates.map(d => {
       const e = state.dailyLogs[d];
       const w = e.workout;
-      const details = w?.done ? [w.type, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
+      const details = w?.done ? [w.type, w.hiit ? 'HIIT 🔥' : null, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
       return `<tr${isInProgramPeriod(d) ? ' class="program-row"' : ''}>
         <td>${dateCellHtml(d)}</td>
         <td>${e.steps ?? '—'}</td>
@@ -1500,7 +1504,7 @@
     const dailyRows = dates.map(d => {
       const e = state.dailyLogs[d];
       const w = e.workout;
-      const details = w?.done ? [w.type, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
+      const details = w?.done ? [w.type, w.hiit ? 'HIIT 🔥' : null, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
       return [formatDateAr(d), e.steps ?? '—', e.calories ?? '—', e.protein ?? '—', w?.done ? '✅' : '—', details];
     });
     const dailyCols = ['التاريخ', 'خطوات', 'سعرات', 'بروتين', 'تمرين', 'تفاصيل'];
