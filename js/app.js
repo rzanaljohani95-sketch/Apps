@@ -23,9 +23,12 @@
       settings: {
         weeklyWorkoutGoal: 4,
         calorieGoal: 1810,
-        proteinGoal: 120,
+        // Protein floor: any amount at/above this is fine (see
+        // computeGoalStatus's overIsGood) — only falling under it matters,
+        // so no cushion margin on top of the floor itself.
+        proteinGoal: 100,
         calorieMarginPct: 5,
-        proteinMarginPct: 8,
+        proteinMarginPct: 0,
         goalDirections: Object.fromEntries(MEASURE_FIELDS.map(f => [f.key, f.defaultGoal])),
         // Known period/cycle length from the user's own tracking history —
         // used instead of the computed average until enough logged periods
