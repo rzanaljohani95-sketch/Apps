@@ -46,6 +46,10 @@
     ...SEGMENTAL_REGIONS.map(r => ({ key: `${r.key}FatPct`, region: r.key, regionLabel: r.label, metric: 'fat', metricLabel: 'الدهون', unit: '%' })),
     ...SEGMENTAL_REGIONS.map(r => ({ key: `${r.key}MusclePct`, region: r.key, regionLabel: r.label, metric: 'muscle', metricLabel: 'العضلات', unit: '%' })),
   ];
+  // The band InBody's own segmental analysis treats as "normal" for a
+  // region (percentage of the standard reference for that region/metric).
+  const SEGMENTAL_NORMAL_LOW = 90;
+  const SEGMENTAL_NORMAL_HIGH = 110;
   // All InBody-report fields the entry/edit form and PDF extraction handle.
   const INBODY_ALL_FIELDS = [...INBODY_FIELDS, ...SEGMENTAL_FIELDS];
 
@@ -1696,17 +1700,33 @@
     return metric === 'fat' ? 'down' : 'up';
   }
 
-  // pointsForField: this field's own entries only, ascending by date.
+  // Whether the region itself sits in InBody's "normal" band — answers "is
+  // this normal, low, or high", independent of whether it's trending well.
+  function segmentLevelLabel(value) {
+    if (value > SEGMENTAL_NORMAL_HIGH) return 'أعلى من الطبيعي';
+    if (value < SEGMENTAL_NORMAL_LOW) return 'أقل من الطبيعي';
+    return 'طبيعي';
+  }
+
+  // pointsForField: this field's own entries only, ascending by date. The
+  // label text always states the absolute level (normal/low/high); the
+  // color (cls) is trend-based once there's a prior reading to compare
+  // against (fat down / muscle up is an improvement), and falls back to the
+  // level itself (normal = good) for a lone first reading with no trend yet.
   function segmentTrend(f, pointsForField) {
     if (pointsForField.length === 0) return null;
     const latest = pointsForField[pointsForField.length - 1][f.key];
-    if (pointsForField.length < 2) return { latest, cls: 'none', text: 'أول قراءة' };
+    const text = segmentLevelLabel(latest);
+    if (pointsForField.length < 2) {
+      const inRange = latest >= SEGMENTAL_NORMAL_LOW && latest <= SEGMENTAL_NORMAL_HIGH;
+      return { latest, cls: inRange ? 'good' : 'bad', text };
+    }
     const prior = pointsForField[pointsForField.length - 2][f.key];
     const diff = round1(latest - prior);
-    if (diff === 0) return { latest, cls: 'flat', text: 'بدون تغيير' };
+    if (diff === 0) return { latest, cls: 'flat', text };
     const improved = (segmentGoalDirection(f.metric) === 'down' && diff < 0) ||
                       (segmentGoalDirection(f.metric) === 'up' && diff > 0);
-    return { latest, cls: improved ? 'good' : 'bad', text: improved ? 'تحسّن' : 'تراجع' };
+    return { latest, cls: improved ? 'good' : 'bad', text };
   }
 
   // A plain (uncolored) body silhouette — matches the flat grey figure on a
