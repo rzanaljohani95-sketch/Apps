@@ -28,6 +28,27 @@
     { key: 'totalBodyWater',     label: 'ماء الجسم',          unit: 'لتر',   defaultGoal: 'up'   },
   ];
 
+  // InBody's segmental lean/fat analysis reports each body region as a
+  // percentage of its own "normal" range (not an absolute mass) — e.g. 105%
+  // means 5% above the standard for that region, 100% is the midpoint. These
+  // stay separate from INBODY_FIELDS (which drives the plain measurement
+  // form/table) because "good" here depends on the metric (more muscle is
+  // good, more fat isn't) AND sits around a 100% midpoint rather than
+  // monotonically up or down, so they get their own distribution view.
+  const SEGMENTAL_REGIONS = [
+    { key: 'upper', label: 'الجزء العلوي' },
+    { key: 'trunk', label: 'الجذع' },
+    { key: 'lower', label: 'الجزء السفلي' },
+  ];
+  const SEGMENTAL_FIELDS = [
+    ...SEGMENTAL_REGIONS.map(r => ({ key: `${r.key}FatPct`, region: r.key, regionLabel: r.label, metric: 'fat', metricLabel: 'الدهون', unit: '%' })),
+    ...SEGMENTAL_REGIONS.map(r => ({ key: `${r.key}MusclePct`, region: r.key, regionLabel: r.label, metric: 'muscle', metricLabel: 'العضلات', unit: '%' })),
+  ];
+  const SEGMENTAL_NORMAL_LOW = 90;
+  const SEGMENTAL_NORMAL_HIGH = 110;
+  // All InBody-report fields the entry/edit form and PDF extraction handle.
+  const INBODY_ALL_FIELDS = [...INBODY_FIELDS, ...SEGMENTAL_FIELDS];
+
   // MEASURE_FIELDS and INBODY_FIELDS both have a 'weight' entry (same real-world
   // quantity, one goal direction) — de-duplicated by key for anything that lists
   // every trackable field once, like the settings' goal-direction picker.
@@ -598,6 +619,10 @@
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      // Sparkline charts are sized to their card's real rendered width, which
+      // is 0 while the tab is hidden — re-measure now that it's visible.
+      if (btn.dataset.tab === 'measurements') renderMeasureOverview();
+      if (btn.dataset.tab === 'inbody') { renderInbodyOverview(); renderSegmentalDistribution(); }
     });
   });
 
@@ -1314,14 +1339,61 @@
 
   /* ---------- measurements overview (all fields at a glance) ---------- */
 
-  // A minimal sparkline path for one field's whole history, scaled to its
-  // own min/max — not meant to carry an axis, just the shape of the trend.
-  function buildSparklinePath(values, w, h, pad) {
-    let min = Math.min(...values), max = Math.max(...values);
-    if (min === max) { min -= 1; max += 1; }
-    const stepX = (w - pad * 2) / (values.length - 1);
-    const yFor = v => pad + (h - pad * 2) - ((v - min) / (max - min)) * (h - pad * 2);
-    return values.map((v, i) => `${i === 0 ? 'M' : 'L'}${(pad + i * stepX).toFixed(1)},${yFor(v).toFixed(1)}`).join(' ');
+  // A sparkline for one field's whole history, scaled to its own min/max,
+  // with a visible dot on every reading plus direct labels on the min and
+  // max points (so the trend has a real scale, not just an unlabelled
+  // wiggle). Built in real pixel units (viewBox === width × height) rather
+  // than a stretched abstract box, so the dots stay circular instead of
+  // being squashed into ellipses by non-uniform scaling.
+  const SPARK_HEIGHT = 110;
+
+  function buildSparklineSvg(values, width, height) {
+    const pad = 18;
+    const realMin = Math.min(...values), realMax = Math.max(...values);
+    let scaleMin = realMin, scaleMax = realMax;
+    if (scaleMin === scaleMax) { scaleMin -= 1; scaleMax += 1; }
+    const plotW = Math.max(1, width - pad * 2);
+    const plotH = height - pad * 2;
+    const stepX = values.length > 1 ? plotW / (values.length - 1) : 0;
+    const xFor = i => pad + i * stepX;
+    const yFor = v => pad + plotH - ((v - scaleMin) / (scaleMax - scaleMin)) * plotH;
+    const lbl = v => Math.round(v * 10) / 10;
+
+    const pathD = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`).join(' ');
+
+    const dots = values.map((v, i) => {
+      const isLast = i === values.length - 1;
+      return `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="${isLast ? 5 : 4}" class="mo-dot${isLast ? ' mo-dot-latest' : ''}"/>`;
+    }).join('');
+
+    let labels = '';
+    if (realMax !== realMin) {
+      const maxIdx = values.indexOf(realMax);
+      const minIdx = values.indexOf(realMin);
+      labels += `<text x="${xFor(maxIdx).toFixed(1)}" y="${(yFor(realMax) - 10).toFixed(1)}" class="mo-point-label" text-anchor="middle">${lbl(realMax)}</text>`;
+      labels += `<text x="${xFor(minIdx).toFixed(1)}" y="${(yFor(realMin) + 16).toFixed(1)}" class="mo-point-label" text-anchor="middle">${lbl(realMin)}</text>`;
+    }
+
+    return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="mo-spark-svg">
+      <path d="${pathD}" class="mo-spark-path"/>
+      ${dots}
+      ${labels}
+    </svg>`;
+  }
+
+  // Charts are built in a second pass, after the cards are in the DOM, so
+  // each one is sized to its card's real rendered width — the sparkline's
+  // coordinate space is literal pixels, so getting the width right (not an
+  // abstract box that CSS stretches) is what keeps every dot circular.
+  function renderSparklineCharts(containerEl, sparkSource) {
+    Object.keys(sparkSource).forEach(key => {
+      const wrap = containerEl.querySelector(`[data-spark-key="${key}"]`);
+      if (!wrap) return;
+      const { values, deltaCls } = sparkSource[key];
+      const width = wrap.clientWidth || 260;
+      wrap.className = `mo-spark-wrap mo-spark-${deltaCls}`;
+      wrap.innerHTML = buildSparklineSvg(values, width, SPARK_HEIGHT);
+    });
   }
 
   function renderMeasureOverview() {
@@ -1335,6 +1407,7 @@
     emptyMsg.classList.add('hidden');
 
     const sorted = [...state.measurements].sort((a, b) => a.date.localeCompare(b.date));
+    const sparkSource = {};
 
     el.innerHTML = MEASURE_FIELDS.map(f => {
       const points = sorted.filter(m => m[f.key] !== null && m[f.key] !== undefined);
@@ -1359,11 +1432,13 @@
       }
       const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '→';
 
-      const sparkline = points.length >= 2
-        ? `<svg viewBox="0 0 100 32" class="mo-spark mo-spark-${deltaCls}" preserveAspectRatio="none">
-             <path d="${buildSparklinePath(values, 100, 32, 4)}"/>
-           </svg>`
-        : `<p class="muted mo-empty">قياس واحد فقط لحد الآن</p>`;
+      let sparkline;
+      if (points.length >= 2) {
+        sparkSource[f.key] = { values, deltaCls };
+        sparkline = `<div class="mo-spark-wrap" data-spark-key="${f.key}"></div>`;
+      } else {
+        sparkline = `<p class="muted mo-empty">قياس واحد فقط لحد الآن</p>`;
+      }
 
       const deltaLine = points.length >= 2
         ? `<div class="mo-delta ${deltaCls}">${arrow} ${diff > 0 ? '+' : ''}${diff} ${f.unit} منذ أول قياس</div>`
@@ -1380,6 +1455,8 @@
         </div>
       `;
     }).join('');
+
+    renderSparklineCharts(el, sparkSource);
   }
 
   /* ============================ INBODY FORM ============================ */
@@ -1392,12 +1469,22 @@
     </div>
   `).join('');
 
+  const inbodySegmentalFieldsEl = document.getElementById('inbodySegmentalFields');
+  if (inbodySegmentalFieldsEl) {
+    inbodySegmentalFieldsEl.innerHTML = SEGMENTAL_FIELDS.map(f => `
+      <div class="field">
+        <label for="ib_${f.key}">${f.regionLabel} — ${f.metricLabel} (%)</label>
+        <input type="number" step="0.1" min="0" id="ib_${f.key}" placeholder="—">
+      </div>
+    `).join('');
+  }
+
   document.getElementById('inbodyDate').value = todayStr();
 
   function updateInbodyPlaceholders() {
     const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
     const latest = sorted[sorted.length - 1];
-    INBODY_FIELDS.forEach(f => {
+    INBODY_ALL_FIELDS.forEach(f => {
       const input = document.getElementById(`ib_${f.key}`);
       if (!input) return;
       const prior = latest ? latest[f.key] : null;
@@ -1409,7 +1496,7 @@
 
   function readInbodyFormValues() {
     const values = {};
-    INBODY_FIELDS.forEach(f => {
+    INBODY_ALL_FIELDS.forEach(f => {
       const input = document.getElementById(`ib_${f.key}`);
       values[f.key] = input ? numOrNull(input.value) : null;
     });
@@ -1417,7 +1504,7 @@
   }
 
   function clearInbodyForm() {
-    INBODY_FIELDS.forEach(f => {
+    INBODY_ALL_FIELDS.forEach(f => {
       const input = document.getElementById(`ib_${f.key}`);
       if (input) input.value = '';
     });
@@ -1429,7 +1516,7 @@
     if (!r) return;
     editingInbodyId = id;
     document.getElementById('inbodyDate').value = r.date;
-    INBODY_FIELDS.forEach(f => {
+    INBODY_ALL_FIELDS.forEach(f => {
       const input = document.getElementById(`ib_${f.key}`);
       if (input) input.value = r[f.key] ?? '';
     });
@@ -1590,6 +1677,7 @@
     emptyMsg.classList.add('hidden');
 
     const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
+    const sparkSource = {};
 
     el.innerHTML = INBODY_FIELDS.map(f => {
       const points = sorted.filter(r => r[f.key] !== null && r[f.key] !== undefined);
@@ -1614,11 +1702,13 @@
       }
       const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '→';
 
-      const sparkline = points.length >= 2
-        ? `<svg viewBox="0 0 100 32" class="mo-spark mo-spark-${deltaCls}" preserveAspectRatio="none">
-             <path d="${buildSparklinePath(values, 100, 32, 4)}"/>
-           </svg>`
-        : `<p class="muted mo-empty">قراءة واحدة فقط لحد الآن</p>`;
+      let sparkline;
+      if (points.length >= 2) {
+        sparkSource[f.key] = { values, deltaCls };
+        sparkline = `<div class="mo-spark-wrap" data-spark-key="${f.key}"></div>`;
+      } else {
+        sparkline = `<p class="muted mo-empty">قراءة واحدة فقط لحد الآن</p>`;
+      }
 
       const deltaLine = points.length >= 2
         ? `<div class="mo-delta ${deltaCls}">${arrow} ${diff > 0 ? '+' : ''}${diff} ${f.unit} منذ أول قراءة</div>`
@@ -1635,6 +1725,104 @@
         </div>
       `;
     }).join('');
+
+    renderSparklineCharts(el, sparkSource);
+  }
+
+  /* ---------- segmental fat/muscle distribution (upper/trunk/lower) ---------- */
+
+  // Each region is reported as a % of its own "normal" range, not an
+  // absolute amount — ~100% is the midpoint, so status is a band around it
+  // rather than a monotonic better-is-higher/lower comparison. "Good" also
+  // flips by metric: more muscle than normal is good, more fat isn't.
+  function segmentStatus(metric, value) {
+    if (value === null || value === undefined) return null;
+    const isHigh = value > SEGMENTAL_NORMAL_HIGH;
+    const isLow = value < SEGMENTAL_NORMAL_LOW;
+    if (metric === 'fat') {
+      if (isHigh) return { cls: 'bad', text: 'أعلى من المعدل' };
+      if (isLow) return { cls: 'good', text: 'أقل من المعدل' };
+      return { cls: 'good', text: 'طبيعي' };
+    }
+    if (isLow) return { cls: 'bad', text: 'أقل من المعدل' };
+    if (isHigh) return { cls: 'good', text: 'أعلى من المعدل' };
+    return { cls: 'good', text: 'طبيعي' };
+  }
+
+  function segmentTileHtml(f, value) {
+    if (value === null || value === undefined) {
+      return `<div class="segment-tile"><div class="segment-region">${f.regionLabel}</div><div class="segment-value muted">لا يوجد</div></div>`;
+    }
+    const status = segmentStatus(f.metric, value);
+    return `
+      <div class="segment-tile ${status.cls}">
+        <div class="segment-region">${f.regionLabel}</div>
+        <div class="segment-value">${value}%</div>
+        <div class="segment-status">${status.text}</div>
+      </div>
+    `;
+  }
+
+  function renderSegmentalDistribution() {
+    const snapshotEl = document.getElementById('segmentalSnapshot');
+    const trendsEl = document.getElementById('segmentalTrends');
+    const emptyMsg = document.getElementById('segmentalEmptyMsg');
+    if (!snapshotEl || !trendsEl || !emptyMsg) return;
+
+    const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
+    const hasAny = sorted.some(r => SEGMENTAL_FIELDS.some(f => r[f.key] !== null && r[f.key] !== undefined));
+    if (!hasAny) {
+      snapshotEl.innerHTML = '';
+      trendsEl.innerHTML = '';
+      emptyMsg.classList.remove('hidden');
+      return;
+    }
+    emptyMsg.classList.add('hidden');
+
+    const latestWithData = [...sorted].reverse()
+      .find(r => SEGMENTAL_FIELDS.some(f => r[f.key] !== null && r[f.key] !== undefined));
+    const fatFields = SEGMENTAL_FIELDS.filter(f => f.metric === 'fat');
+    const muscleFields = SEGMENTAL_FIELDS.filter(f => f.metric === 'muscle');
+
+    snapshotEl.innerHTML = `
+      <div class="segment-group">
+        <div class="segment-group-title">توزيع الدهون — آخر قراءة (${formatDateAr(latestWithData.date)})</div>
+        <div class="segment-row">${fatFields.map(f => segmentTileHtml(f, latestWithData[f.key])).join('')}</div>
+      </div>
+      <div class="segment-group">
+        <div class="segment-group-title">توزيع العضلات — آخر قراءة (${formatDateAr(latestWithData.date)})</div>
+        <div class="segment-row">${muscleFields.map(f => segmentTileHtml(f, latestWithData[f.key])).join('')}</div>
+      </div>
+    `;
+
+    const sparkSource = {};
+    trendsEl.innerHTML = SEGMENTAL_FIELDS.map(f => {
+      const points = sorted.filter(r => r[f.key] !== null && r[f.key] !== undefined);
+      if (points.length === 0) return '';
+      const values = points.map(p => p[f.key]);
+      const latest = values[values.length - 1];
+      const status = segmentStatus(f.metric, latest);
+
+      let sparkline;
+      if (points.length >= 2) {
+        sparkSource[f.key] = { values, deltaCls: status.cls };
+        sparkline = `<div class="mo-spark-wrap" data-spark-key="${f.key}"></div>`;
+      } else {
+        sparkline = `<p class="muted mo-empty">قراءة واحدة فقط لحد الآن</p>`;
+      }
+
+      return `
+        <div class="mo-card">
+          <div class="mo-header">
+            <span class="mo-label">${f.regionLabel} — ${f.metricLabel}</span>
+            <span class="mo-latest">${latest}%</span>
+          </div>
+          ${sparkline}
+        </div>
+      `;
+    }).join('');
+
+    renderSparklineCharts(trendsEl, sparkSource);
   }
 
   /* ============================ SETTINGS MODAL ============================ */
@@ -2196,8 +2384,21 @@
     '  "bmi": مؤشر كتلة الجسم BMI كرقم,\n' +
     '  "visceralFatLevel": مستوى الدهون الحشوية Visceral Fat Level / VFL كرقم,\n' +
     '  "bmr": معدل الحرق الأساسي Basal Metabolic Rate / BMR بالسعرات,\n' +
-    '  "totalBodyWater": ماء الجسم الكلي Total Body Water / TBW باللتر\n' +
-    '}';
+    '  "totalBodyWater": ماء الجسم الكلي Total Body Water / TBW باللتر,\n' +
+    '  "upperFatPct": نسبة دهون الجزء العلوي (Upper Body / Arms) كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "trunkFatPct": نسبة دهون الجذع (Trunk) كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "lowerFatPct": نسبة دهون الجزء السفلي (Lower Body / Legs) كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "upperMusclePct": نسبة عضلات الجزء العلوي كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "trunkMusclePct": نسبة عضلات الجذع كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "lowerMusclePct": نسبة عضلات الجزء السفلي كنسبة من المعدل الطبيعي، كرقم بدون %\n' +
+    '}\n' +
+    'ملاحظة مهمة حول الحقول الستة الأخيرة (upper/trunk/lower لكل من الدهون والعضلات): ' +
+    'هذا هو تحليل "Segmental Lean/Fat Analysis" الموجود عادة في تقرير الإنبودي، وفيه نسبة لكل منطقة من الجسم مقارنة بالمعدل الطبيعي (القيمة حول 100% تعني طبيعي). ' +
+    'إذا كان التقرير يعرض 5 مناطق (Right Arm, Left Arm, Trunk, Right Leg, Left Leg) بدلًا من upper/trunk/lower مباشرة، ' +
+    'احسبي: upperFatPct = متوسط Right Arm وLeft Arm لتحليل الدهون (ونفس الشيء لـ upperMusclePct من تحليل العضلات)، ' +
+    'trunkFatPct/trunkMusclePct = قيمة Trunk كما هي، ' +
+    'lowerFatPct/lowerMusclePct = متوسط Right Leg وLeft Leg. ' +
+    'إذا لم يتوفر هذا التحليل في التقرير أصلًا، ضعي null لكل الحقول الستة.';
 
   // Each uploaded file becomes a pending review item here — never written to
   // state.inbody until she explicitly saves it, and never saved with a guessed
@@ -2215,7 +2416,7 @@
       if (item.error) return;
       const dateInput = document.getElementById(`pdfq_${item.uid}_date`);
       if (dateInput) item.date = dateInput.value || null;
-      INBODY_FIELDS.forEach(f => {
+      INBODY_ALL_FIELDS.forEach(f => {
         const input = document.getElementById(`pdfq_${item.uid}_${f.key}`);
         if (input) item.values[f.key] = numOrNull(input.value);
       });
@@ -2253,6 +2454,15 @@
             ${INBODY_FIELDS.map(f => `
               <div class="field">
                 <label for="pdfq_${item.uid}_${f.key}">${f.label}${f.unit ? ` (${f.unit})` : ''}</label>
+                <input type="number" step="0.1" min="0" id="pdfq_${item.uid}_${f.key}" value="${item.values[f.key] ?? ''}" placeholder="—">
+              </div>
+            `).join('')}
+          </div>
+          <p class="pdf-queue-subhead muted">توزيع الدهون والعضلات (إن وُجد في التقرير)</p>
+          <div class="grid-4">
+            ${SEGMENTAL_FIELDS.map(f => `
+              <div class="field">
+                <label for="pdfq_${item.uid}_${f.key}">${f.regionLabel} — ${f.metricLabel} (%)</label>
                 <input type="number" step="0.1" min="0" id="pdfq_${item.uid}_${f.key}" value="${item.values[f.key] ?? ''}" placeholder="—">
               </div>
             `).join('')}
@@ -2353,7 +2563,7 @@
 
         const data = await sampleCap.json(INBODY_EXTRACT_PROMPT, { images: blobs, modelTier: 'default' });
         const values = {};
-        INBODY_FIELDS.forEach(f => {
+        INBODY_ALL_FIELDS.forEach(f => {
           const v = data && data[f.key];
           values[f.key] = (v !== null && v !== undefined && !Number.isNaN(Number(v))) ? Number(v) : null;
         });
@@ -2393,6 +2603,7 @@
     renderInbodyTable();
     renderInbodyDeltaSummary();
     renderInbodyOverview();
+    renderSegmentalDistribution();
     updateInbodyPlaceholders();
   }
 

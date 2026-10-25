@@ -263,11 +263,21 @@
           <input type="date" id="inbodyDate">
         </div>
         <div class="grid-4" id="inbodyFields"></div>
+        <p class="muted" style="margin-top:14px">توزيع الدهون والعضلات في الجسم (اختياري — إذا كان تقريرك يحتوي تحليل Segmental Lean/Fat Analysis)</p>
+        <div class="grid-4" id="inbodySegmentalFields"></div>
         <div class="modal-actions">
           <button type="button" id="inbodySaveBtn" class="btn-primary">حفظ القراءة</button>
           <button type="button" id="inbodyCancelEditBtn" class="btn-secondary hidden">إلغاء التعديل</button>
         </div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>🧍 توزيع الدهون والعضلات في الجسم</h2>
+      <p class="muted">كل منطقة كنسبة من المعدل الطبيعي لها (حول 100% = طبيعي) — آخر قراءة مسجّلة، مع اتجاه التطور عبر الوقت لكل منطقة.</p>
+      <div id="segmentalEmptyMsg" class="muted hidden">لا توجد بيانات توزيع بعد — سجّلي قراءة فيها تحليل Segmental Lean/Fat Analysis ليبدأ التتبع هنا.</div>
+      <div id="segmentalSnapshot" class="segmental-snapshot"></div>
+      <div id="segmentalTrends" class="mo-grid"></div>
     </div>
 
     <div class="card">
