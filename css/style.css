@@ -368,32 +368,6 @@ input:focus, textarea:focus, select:focus {
 }
 .field-pill.active { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 
-/* Secondary, smaller row — a time-range filter, distinct from the field picker above it */
-.period-pills {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-  margin-bottom: 14px;
-  scrollbar-width: thin;
-}
-.period-pill {
-  flex: 0 0 auto;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--font-body);
-  font-size: 0.76rem;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.period-pill.active { background: var(--accent-soft); color: var(--accent-dark); border-color: var(--accent); }
-
-.period-note { font-size: 0.82rem; color: var(--muted); margin-bottom: 10px; }
-
 .big-chart-wrap { width: 100%; }
 .big-chart-title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; margin-bottom: 8px; color: var(--ink); }
 .big-chart-canvas { width: 100%; }

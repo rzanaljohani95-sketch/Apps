@@ -1421,56 +1421,12 @@
     </svg>`;
   }
 
-  // A shared time-range filter above every big chart — "how much changed
-  // over the last month / 3 months / ...", not just point-to-point deltas.
-  // One shared selection across all charts (measurements, InBody, segmental)
-  // since it's a single "how far back am I looking" preference, not a
-  // per-chart setting.
-  const PERIOD_OPTIONS = [
-    { months: 1, label: 'شهر' },
-    { months: 2, label: 'شهرين' },
-    { months: 3, label: '٣ أشهر' },
-    { months: 6, label: '٦ أشهر' },
-    { months: 12, label: 'سنة' },
-    { months: null, label: 'الكل' },
-  ];
-  let selectedPeriodMonths = null;
-
-  // sortedPoints: ascending by date. Keeps everything from (latest date -
-  // months) onward; "الكل" (months=null) is a no-op.
-  function filterByPeriod(sortedPoints, months) {
-    if (!months || sortedPoints.length === 0) return sortedPoints;
-    const cutoff = new Date(sortedPoints[sortedPoints.length - 1].date + 'T00:00:00');
-    cutoff.setMonth(cutoff.getMonth() - months);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    return sortedPoints.filter(p => p.date >= cutoffStr);
-  }
-
-  // Shared across every chart section — picking a period anywhere re-renders
-  // every chart so they all stay on the same window.
-  function renderPeriodPills(containerEl) {
-    if (!containerEl) return;
-    containerEl.innerHTML = PERIOD_OPTIONS.map(p => `
-      <button type="button" class="period-pill ${p.months === selectedPeriodMonths ? 'active' : ''}" data-period="${p.months ?? 'all'}">${p.label}</button>
-    `).join('');
-    containerEl.querySelectorAll('[data-period]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const v = btn.dataset.period;
-        selectedPeriodMonths = v === 'all' ? null : Number(v);
-        renderMeasureOverview();
-        renderInbodyOverview();
-        renderSegmentalDistribution();
-      });
-    });
-  }
-
   // fixedCls, when passed, overrides the usual trend-based good/bad/flat
   // coloring with a constant class (e.g. 'fat'/'muscle') — used where color
   // identifies WHICH metric this is rather than whether it's improving.
-  // points is expected already filtered to the selected period.
   function renderBigFieldChart(containerEl, field, points, goalDirection, fixedCls) {
     if (points.length === 0) {
-      containerEl.innerHTML = `<p class="muted mo-empty">لا توجد بيانات في هذه الفترة لهذا الحقل.</p>`;
+      containerEl.innerHTML = `<p class="muted mo-empty">لا توجد بيانات لهذا الحقل بعد</p>`;
       return;
     }
     let statusCls = fixedCls;
@@ -1484,17 +1440,8 @@
       }
     }
 
-    let periodNote = '';
-    if (points.length >= 2) {
-      const periodLabel = PERIOD_OPTIONS.find(p => p.months === selectedPeriodMonths)?.label || 'الكل';
-      const diff = round1(points[points.length - 1][field.key] - points[0][field.key]);
-      const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '→';
-      periodNote = `<div class="period-note">التغيّر خلال ${periodLabel}: ${arrow} ${diff > 0 ? '+' : ''}${diff} ${field.unit || ''}</div>`;
-    }
-
     containerEl.innerHTML = `
       <div class="big-chart-title">${field.label}</div>
-      ${periodNote}
       <div class="big-chart-canvas"></div>
       ${points.length < 2 ? '<p class="muted mo-empty">قياس واحد فقط لحد الآن — سجّلي قياسًا آخر ليظهر الرسم البياني.</p>' : ''}
     `;
@@ -1541,10 +1488,8 @@
       });
     });
 
-    renderPeriodPills(document.getElementById('measurePeriodPills'));
-
     const field = fieldsWithData.find(f => f.key === selectedMeasureField);
-    const points = filterByPeriod(sorted.filter(m => m[field.key] !== null && m[field.key] !== undefined), selectedPeriodMonths);
+    const points = sorted.filter(m => m[field.key] !== null && m[field.key] !== undefined);
     renderBigFieldChart(chartEl, field, points, state.settings.goalDirections[field.key]);
   }
 
@@ -1757,10 +1702,8 @@
       });
     });
 
-    renderPeriodPills(document.getElementById('inbodyPeriodPills'));
-
     const field = fieldsWithData.find(f => f.key === selectedInbodyField);
-    const points = filterByPeriod(sorted.filter(r => r[field.key] !== null && r[field.key] !== undefined), selectedPeriodMonths);
+    const points = sorted.filter(r => r[field.key] !== null && r[field.key] !== undefined);
     renderBigFieldChart(chartEl, field, points, state.settings.goalDirections[field.key]);
   }
 
@@ -1914,11 +1857,10 @@
       });
 
       const field = fieldsWithData.find(f => f.key === selected);
-      const points = filterByPeriod(sorted.filter(r => r[field.key] !== null && r[field.key] !== undefined), selectedPeriodMonths);
+      const points = sorted.filter(r => r[field.key] !== null && r[field.key] !== undefined);
       renderBigFieldChart(chartEl, { ...field, label: field.regionLabel }, points, null, metric);
     };
 
-    renderPeriodPills(document.getElementById('segmentalPeriodPills'));
     renderMetricSection('fat', fatPillsEl, fatChartEl,
       () => selectedFatSegmentalField, v => { selectedFatSegmentalField = v; });
     renderMetricSection('muscle', musclePillsEl, muscleChartEl,
