@@ -36,9 +36,11 @@
   // direction (fat down / muscle up is an improvement) rather than the
   // plain up/down goal-direction table.
   const SEGMENTAL_REGIONS = [
-    { key: 'upper', label: 'الجزء العلوي' },
+    { key: 'rightArm', label: 'الذراع الأيمن' },
+    { key: 'leftArm', label: 'الذراع الأيسر' },
     { key: 'trunk', label: 'الجذع' },
-    { key: 'lower', label: 'الجزء السفلي' },
+    { key: 'rightLeg', label: 'الرجل اليمنى' },
+    { key: 'leftLeg', label: 'الرجل اليسرى' },
   ];
   const SEGMENTAL_FIELDS = [
     ...SEGMENTAL_REGIONS.map(r => ({ key: `${r.key}FatPct`, region: r.key, regionLabel: r.label, metric: 'fat', metricLabel: 'الدهون', unit: '%' })),
@@ -1297,110 +1299,6 @@
     });
   }
 
-  /* ---------- delta summary (up/down indicators) ---------- */
-
-  function renderDeltaSummary() {
-    const el = document.getElementById('deltaSummary');
-    const sorted = [...state.measurements].sort((a, b) => a.date.localeCompare(b.date));
-    if (sorted.length === 0) {
-      el.innerHTML = `<p class="muted">سجّل قياسًا واحدًا على الأقل لعرض الملخص.</p>`;
-      return;
-    }
-    const latest = sorted[sorted.length - 1];
-    const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
-
-    const bullets = MEASURE_FIELDS.map(f => {
-      const cur = latest[f.key];
-      const prior = prev ? prev[f.key] : null;
-      if (cur === null || cur === undefined) return '';
-      if (prior === null || prior === undefined) {
-        return `<li class="delta-bullet"><span class="delta-bullet-name">${f.label}:</span> <span class="delta-bullet-value">${cur} ${f.unit}</span> <span class="muted">(أول قياس)</span></li>`;
-      }
-      const diff = round1(cur - prior);
-      let cls = 'delta-flat';
-      let arrow = '→';
-      if (diff > 0) { arrow = '▲'; cls = 'delta-up'; }
-      else if (diff < 0) { arrow = '▼'; cls = 'delta-down'; }
-
-      // colour by whether this direction matches the user's goal for this measurement
-      let goalCls = '';
-      const goal = state.settings.goalDirections[f.key];
-      if (diff !== 0 && goal) {
-        const improved = (goal === 'down' && diff < 0) || (goal === 'up' && diff > 0);
-        goalCls = improved ? 'delta-good' : 'delta-bad';
-      }
-
-      return `<li class="delta-bullet">
-        <span class="delta-bullet-name">${f.label}:</span>
-        <span class="delta-bullet-value">${cur} ${f.unit}</span>
-        <span class="delta-bullet-change ${goalCls || cls}">${arrow} ${diff > 0 ? '+' : ''}${diff}</span>
-      </li>`;
-    }).filter(Boolean);
-
-    el.innerHTML = bullets.length
-      ? `<ul class="delta-bullet-list">${bullets.join('')}</ul>`
-      : `<p class="muted">لا توجد بيانات كافية لعرض الملخص.</p>`;
-  }
-
-  /* ---------- measurements overview (all fields at a glance) ---------- */
-
-  // A sparkline for one field's whole history, scaled to its own min/max,
-  // with a visible dot on every reading plus direct labels on the min and
-  // max points (so the trend has a real scale, not just an unlabelled
-  // wiggle). Built in real pixel units (viewBox === width × height) rather
-  // than a stretched abstract box, so the dots stay circular instead of
-  // being squashed into ellipses by non-uniform scaling.
-  const SPARK_HEIGHT = 110;
-
-  function buildSparklineSvg(values, width, height) {
-    const pad = 18;
-    const realMin = Math.min(...values), realMax = Math.max(...values);
-    let scaleMin = realMin, scaleMax = realMax;
-    if (scaleMin === scaleMax) { scaleMin -= 1; scaleMax += 1; }
-    const plotW = Math.max(1, width - pad * 2);
-    const plotH = height - pad * 2;
-    const stepX = values.length > 1 ? plotW / (values.length - 1) : 0;
-    const xFor = i => pad + i * stepX;
-    const yFor = v => pad + plotH - ((v - scaleMin) / (scaleMax - scaleMin)) * plotH;
-    const lbl = v => Math.round(v * 10) / 10;
-
-    const pathD = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`).join(' ');
-
-    const dots = values.map((v, i) => {
-      const isLast = i === values.length - 1;
-      return `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="${isLast ? 5 : 4}" class="mo-dot${isLast ? ' mo-dot-latest' : ''}"/>`;
-    }).join('');
-
-    let labels = '';
-    if (realMax !== realMin) {
-      const maxIdx = values.indexOf(realMax);
-      const minIdx = values.indexOf(realMin);
-      labels += `<text x="${xFor(maxIdx).toFixed(1)}" y="${(yFor(realMax) - 10).toFixed(1)}" class="mo-point-label" text-anchor="middle">${lbl(realMax)}</text>`;
-      labels += `<text x="${xFor(minIdx).toFixed(1)}" y="${(yFor(realMin) + 16).toFixed(1)}" class="mo-point-label" text-anchor="middle">${lbl(realMin)}</text>`;
-    }
-
-    return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="mo-spark-svg">
-      <path d="${pathD}" class="mo-spark-path"/>
-      ${dots}
-      ${labels}
-    </svg>`;
-  }
-
-  // Charts are built in a second pass, after the cards are in the DOM, so
-  // each one is sized to its card's real rendered width — the sparkline's
-  // coordinate space is literal pixels, so getting the width right (not an
-  // abstract box that CSS stretches) is what keeps every dot circular.
-  function renderSparklineCharts(containerEl, sparkSource) {
-    Object.keys(sparkSource).forEach(key => {
-      const wrap = containerEl.querySelector(`[data-spark-key="${key}"]`);
-      if (!wrap) return;
-      const { values, deltaCls } = sparkSource[key];
-      const width = wrap.clientWidth || 260;
-      wrap.className = `mo-spark-wrap mo-spark-${deltaCls}`;
-      wrap.innerHTML = buildSparklineSvg(values, width, SPARK_HEIGHT);
-    });
-  }
-
   /* ---------- big single-field chart (one field at a time, picked via pills) ---------- */
 
   const BIG_CHART_HEIGHT = 240;
@@ -1725,48 +1623,6 @@
     });
   }
 
-  function renderInbodyDeltaSummary() {
-    const el = document.getElementById('inbodyDeltaSummary');
-    const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
-    if (sorted.length === 0) {
-      el.innerHTML = `<p class="muted">سجّلي قراءة واحدة على الأقل لعرض الملخص.</p>`;
-      return;
-    }
-    const latest = sorted[sorted.length - 1];
-    const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
-
-    const bullets = INBODY_FIELDS.map(f => {
-      const cur = latest[f.key];
-      const prior = prev ? prev[f.key] : null;
-      if (cur === null || cur === undefined) return '';
-      if (prior === null || prior === undefined) {
-        return `<li class="delta-bullet"><span class="delta-bullet-name">${f.label}:</span> <span class="delta-bullet-value">${cur} ${f.unit}</span> <span class="muted">(أول قراءة)</span></li>`;
-      }
-      const diff = round1(cur - prior);
-      let cls = 'delta-flat';
-      let arrow = '→';
-      if (diff > 0) { arrow = '▲'; cls = 'delta-up'; }
-      else if (diff < 0) { arrow = '▼'; cls = 'delta-down'; }
-
-      let goalCls = '';
-      const goal = state.settings.goalDirections[f.key];
-      if (diff !== 0 && goal) {
-        const improved = (goal === 'down' && diff < 0) || (goal === 'up' && diff > 0);
-        goalCls = improved ? 'delta-good' : 'delta-bad';
-      }
-
-      return `<li class="delta-bullet">
-        <span class="delta-bullet-name">${f.label}:</span>
-        <span class="delta-bullet-value">${cur} ${f.unit}</span>
-        <span class="delta-bullet-change ${goalCls || cls}">${arrow} ${diff > 0 ? '+' : ''}${diff}</span>
-      </li>`;
-    }).filter(Boolean);
-
-    el.innerHTML = bullets.length
-      ? `<ul class="delta-bullet-list">${bullets.join('')}</ul>`
-      : `<p class="muted">لا توجد بيانات كافية لعرض الملخص.</p>`;
-  }
-
   let selectedInbodyField = null;
 
   function renderInbodyOverview() {
@@ -1831,38 +1687,56 @@
     return { latest, cls: improved ? 'good' : 'bad', text: improved ? 'تحسّن' : 'تراجع' };
   }
 
-  // A simplified body silhouette split into exactly the three zones we track
-  // (upper/trunk/lower), each one an independently-colorable <g>.
+  // A simplified body silhouette split into InBody's own five segments
+  // (right/left arm, trunk, right/left leg), each an independently-colorable
+  // <g>. Drawn as if the figure faces the viewer (the standard medical/
+  // InBody-report convention), so the PERSON's right arm/leg is the shape on
+  // the screen's left — "يمين"/"يسار" labels on the diagram make this
+  // explicit rather than relying on position alone. Same capsule proportions
+  // as the body illustration in the measurement guide.
   function bodyZoneSvg(zones) {
-    return `<svg viewBox="0 0 160 260" class="body-diagram-svg" role="img" aria-label="رسم توضيحي لتوزيع الجسم">
-      <circle cx="80" cy="22" r="16" class="body-zone-neutral"/>
-      <g class="body-zone-${zones.upper}">
-        <rect x="40" y="42" width="80" height="50" rx="20"/>
-        <rect x="18" y="46" width="20" height="90" rx="10"/>
-        <rect x="122" y="46" width="20" height="90" rx="10"/>
-      </g>
+    return `<svg viewBox="0 0 240 380" class="body-diagram-svg" role="img" aria-label="رسم توضيحي لتوزيع الجسم مع تمييز الجانب الأيمن والأيسر">
+      <ellipse cx="120" cy="28" rx="17" ry="19" class="body-zone-neutral"/>
+      <rect x="112" y="45" width="16" height="14" rx="4" class="body-zone-neutral"/>
       <g class="body-zone-${zones.trunk}">
-        <rect x="48" y="92" width="64" height="58" rx="18"/>
+        <rect x="68" y="58" width="104" height="54" rx="26"/>
+        <rect x="87" y="103" width="66" height="32" rx="16"/>
+        <rect x="74" y="126" width="92" height="42" rx="21"/>
       </g>
-      <g class="body-zone-${zones.lower}">
-        <rect x="44" y="148" width="72" height="37" rx="16"/>
-        <rect x="50" y="182" width="24" height="75" rx="12"/>
-        <rect x="86" y="182" width="24" height="75" rx="12"/>
+      <g class="body-zone-${zones.rightArm}">
+        <rect x="38" y="64" width="27" height="116" rx="13.5"/>
       </g>
+      <g class="body-zone-${zones.leftArm}">
+        <rect x="175" y="64" width="27" height="116" rx="13.5"/>
+      </g>
+      <g class="body-zone-${zones.rightLeg}">
+        <rect x="78" y="165" width="35" height="90" rx="17"/>
+        <rect x="82" y="252" width="27" height="90" rx="13.5"/>
+      </g>
+      <g class="body-zone-${zones.leftLeg}">
+        <rect x="127" y="165" width="35" height="90" rx="17"/>
+        <rect x="131" y="252" width="27" height="90" rx="13.5"/>
+      </g>
+      <text x="22" y="56" class="body-side-label" text-anchor="middle">يمين</text>
+      <text x="218" y="56" class="body-side-label" text-anchor="middle">يسار</text>
     </svg>`;
   }
 
+  let selectedSegmentalField = null;
+
   function renderSegmentalDistribution() {
     const snapshotEl = document.getElementById('segmentalSnapshot');
-    const trendsEl = document.getElementById('segmentalTrends');
+    const pillsEl = document.getElementById('segmentalFieldPills');
+    const chartEl = document.getElementById('segmentalBigChart');
     const emptyMsg = document.getElementById('segmentalEmptyMsg');
-    if (!snapshotEl || !trendsEl || !emptyMsg) return;
+    if (!snapshotEl || !pillsEl || !chartEl || !emptyMsg) return;
 
     const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
     const hasAny = sorted.some(r => SEGMENTAL_FIELDS.some(f => r[f.key] !== null && r[f.key] !== undefined));
     if (!hasAny) {
       snapshotEl.innerHTML = '';
-      trendsEl.innerHTML = '';
+      pillsEl.innerHTML = '';
+      chartEl.innerHTML = '';
       emptyMsg.classList.remove('hidden');
       return;
     }
@@ -1872,7 +1746,7 @@
       .find(r => SEGMENTAL_FIELDS.some(f => r[f.key] !== null && r[f.key] !== undefined)).date;
 
     const buildGroup = (metric, title) => {
-      const regions = ['upper', 'trunk', 'lower'];
+      const regions = SEGMENTAL_REGIONS.map(r => r.key);
       const zoneCls = {};
       const labelRows = regions.map(region => {
         const f = SEGMENTAL_FIELDS.find(x => x.region === region && x.metric === metric);
@@ -1898,34 +1772,26 @@
 
     snapshotEl.innerHTML = buildGroup('fat', 'توزيع الدهون') + buildGroup('muscle', 'توزيع العضلات');
 
-    const sparkSource = {};
-    trendsEl.innerHTML = SEGMENTAL_FIELDS.map(f => {
-      const points = sorted.filter(r => r[f.key] !== null && r[f.key] !== undefined);
-      if (points.length === 0) return '';
-      const values = points.map(p => p[f.key]);
-      const latest = values[values.length - 1];
-      const trend = segmentTrend(f, points);
+    // Same pill-selector + single big chart pattern as the InBody/measurements
+    // overview, instead of a grid of small cards, for one consistent style.
+    const fieldsWithData = SEGMENTAL_FIELDS.filter(f => sorted.some(r => r[f.key] !== null && r[f.key] !== undefined));
+    if (!selectedSegmentalField || !fieldsWithData.some(f => f.key === selectedSegmentalField)) {
+      selectedSegmentalField = fieldsWithData[0].key;
+    }
 
-      let sparkline;
-      if (points.length >= 2) {
-        sparkSource[f.key] = { values, deltaCls: trend.cls };
-        sparkline = `<div class="mo-spark-wrap" data-spark-key="${f.key}"></div>`;
-      } else {
-        sparkline = `<p class="muted mo-empty">قراءة واحدة فقط لحد الآن</p>`;
-      }
+    pillsEl.innerHTML = fieldsWithData.map(f => `
+      <button type="button" class="field-pill ${f.key === selectedSegmentalField ? 'active' : ''}" data-field-pill="${f.key}">${f.regionLabel} — ${f.metricLabel}</button>
+    `).join('');
+    pillsEl.querySelectorAll('[data-field-pill]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedSegmentalField = btn.dataset.fieldPill;
+        renderSegmentalDistribution();
+      });
+    });
 
-      return `
-        <div class="mo-card">
-          <div class="mo-header">
-            <span class="mo-label">${f.regionLabel} — ${f.metricLabel}</span>
-            <span class="mo-latest">${latest}%</span>
-          </div>
-          ${sparkline}
-        </div>
-      `;
-    }).join('');
-
-    renderSparklineCharts(trendsEl, sparkSource);
+    const field = fieldsWithData.find(f => f.key === selectedSegmentalField);
+    const points = sorted.filter(r => r[field.key] !== null && r[field.key] !== undefined);
+    renderBigFieldChart(chartEl, { ...field, label: `${field.regionLabel} — ${field.metricLabel}` }, points, segmentGoalDirection(field.metric));
   }
 
   /* ============================ SETTINGS MODAL ============================ */
@@ -2488,20 +2354,21 @@
     '  "visceralFatLevel": مستوى الدهون الحشوية Visceral Fat Level / VFL كرقم,\n' +
     '  "bmr": معدل الحرق الأساسي Basal Metabolic Rate / BMR بالسعرات,\n' +
     '  "totalBodyWater": ماء الجسم الكلي Total Body Water / TBW باللتر,\n' +
-    '  "upperFatPct": نسبة دهون الجزء العلوي (Upper Body / Arms) كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
-    '  "trunkFatPct": نسبة دهون الجذع (Trunk) كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
-    '  "lowerFatPct": نسبة دهون الجزء السفلي (Lower Body / Legs) كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
-    '  "upperMusclePct": نسبة عضلات الجزء العلوي كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "rightArmFatPct": نسبة دهون الذراع الأيمن Right Arm كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "leftArmFatPct": نسبة دهون الذراع الأيسر Left Arm كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "trunkFatPct": نسبة دهون الجذع Trunk كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "rightLegFatPct": نسبة دهون الرجل اليمنى Right Leg كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "leftLegFatPct": نسبة دهون الرجل اليسرى Left Leg كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "rightArmMusclePct": نسبة عضلات الذراع الأيمن كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "leftArmMusclePct": نسبة عضلات الذراع الأيسر كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
     '  "trunkMusclePct": نسبة عضلات الجذع كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
-    '  "lowerMusclePct": نسبة عضلات الجزء السفلي كنسبة من المعدل الطبيعي، كرقم بدون %\n' +
+    '  "rightLegMusclePct": نسبة عضلات الرجل اليمنى كنسبة من المعدل الطبيعي، كرقم بدون %,\n' +
+    '  "leftLegMusclePct": نسبة عضلات الرجل اليسرى كنسبة من المعدل الطبيعي، كرقم بدون %\n' +
     '}\n' +
-    'ملاحظة مهمة حول الحقول الستة الأخيرة (upper/trunk/lower لكل من الدهون والعضلات): ' +
-    'هذا هو تحليل "Segmental Lean/Fat Analysis" الموجود عادة في تقرير الإنبودي، وفيه نسبة لكل منطقة من الجسم مقارنة بالمعدل الطبيعي (القيمة حول 100% تعني طبيعي). ' +
-    'إذا كان التقرير يعرض 5 مناطق (Right Arm, Left Arm, Trunk, Right Leg, Left Leg) بدلًا من upper/trunk/lower مباشرة، ' +
-    'احسبي: upperFatPct = متوسط Right Arm وLeft Arm لتحليل الدهون (ونفس الشيء لـ upperMusclePct من تحليل العضلات)، ' +
-    'trunkFatPct/trunkMusclePct = قيمة Trunk كما هي، ' +
-    'lowerFatPct/lowerMusclePct = متوسط Right Leg وLeft Leg. ' +
-    'إذا لم يتوفر هذا التحليل في التقرير أصلًا، ضعي null لكل الحقول الستة.';
+    'ملاحظة مهمة حول الحقول العشرة الأخيرة: هذا هو تحليل "Segmental Lean/Fat Analysis" الموجود عادة في تقرير الإنبودي، ' +
+    'وفيه نسبة لكل منطقة من الجسم (Right Arm, Left Arm, Trunk, Right Leg, Left Leg) مقارنة بالمعدل الطبيعي لكل تحليل (الدهون والعضلات) على حدة — ' +
+    'خذي كل منطقة كما هي مطبوعة بالضبط، بدون حساب متوسطات أو دمج بين المناطق. ' +
+    'إذا لم يتوفر هذا التحليل في التقرير أصلًا، ضعي null لكل الحقول العشرة.';
 
   // Each uploaded file becomes a pending review item here — never written to
   // state.inbody until she explicitly saves it, and never saved with a guessed
@@ -2727,11 +2594,9 @@
     renderRecentDailyTable();
     renderFullDailyTable();
     renderMeasureTable();
-    renderDeltaSummary();
     renderMeasureOverview();
     updateMeasurePlaceholders();
     renderInbodyTable();
-    renderInbodyDeltaSummary();
     renderInbodyOverview();
     renderSegmentalDistribution();
     updateInbodyPlaceholders();

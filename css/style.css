@@ -303,7 +303,8 @@ input:focus, textarea:focus, select:focus {
 .body-label-value.good { color: var(--accent-dark); }
 .body-label-value.bad { color: var(--warn); }
 .body-label-value.flat { color: var(--muted); }
-.body-diagram-svg { width: 108px; height: auto; flex: 0 0 auto; }
+.body-diagram-svg { width: 130px; height: auto; flex: 0 0 auto; }
+.body-side-label { font-size: 15px; font-weight: 700; fill: var(--muted); }
 .body-zone-neutral { fill: var(--surface-2); }
 .body-zone-none rect { fill: var(--surface-2); }
 .body-zone-flat rect { fill: var(--muted); opacity: 0.55; }
@@ -598,48 +599,6 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .streak-info { flex: 1; }
 .streak-flame { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--ink); }
 .streak-sub { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
-
-.mo-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-@media (max-width: 420px) {
-  .mo-grid { grid-template-columns: 1fr; }
-}
-
-.mo-card {
-  background: var(--surface-2);
-  border-radius: 12px;
-  padding: 12px;
-}
-
-.mo-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.mo-label { font-size: 0.82rem; font-weight: 600; color: var(--ink); }
-.mo-latest { font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; color: var(--ink); }
-
-.mo-spark-wrap { width: 100%; }
-.mo-spark-svg { display: block; overflow: visible; }
-.mo-spark-path { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.mo-dot { stroke: var(--surface-2); stroke-width: 2; }
-.mo-point-label { font-size: 10px; font-weight: 700; fill: var(--muted); }
-.mo-spark-good .mo-spark-path { stroke: var(--accent); }
-.mo-spark-good .mo-dot { fill: var(--accent); }
-.mo-spark-bad .mo-spark-path { stroke: var(--warn); }
-.mo-spark-bad .mo-dot { fill: var(--warn); }
-.mo-spark-flat .mo-spark-path { stroke: var(--muted); }
-.mo-spark-flat .mo-dot { fill: var(--muted); }
-
-.mo-delta { font-size: 0.72rem; margin-top: 6px; }
-.mo-delta.good { color: var(--accent-dark); }
-.mo-delta.bad { color: var(--warn); }
-.mo-delta.flat { color: var(--muted); }
 
 .mo-empty { font-size: 0.72rem; margin: 8px 0 0; }
 
