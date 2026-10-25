@@ -87,6 +87,28 @@
     };
   }
 
+  // Segmental tracking used to be 3 regions (upper/trunk/lower, each an
+  // average of its two limbs) before it became InBody's real 5-segment
+  // model (right/left arm, trunk, right/left leg). Readings saved under the
+  // old keys would otherwise just go blank for arms/legs — fill both sides
+  // from the old averaged value instead (an approximation, but better than
+  // losing the reading; re-uploading that report gets the real split).
+  function migrateSegmentalFields(entry) {
+    const pairs = [
+      ['upperFatPct', 'rightArmFatPct', 'leftArmFatPct'],
+      ['lowerFatPct', 'rightLegFatPct', 'leftLegFatPct'],
+      ['upperMusclePct', 'rightArmMusclePct', 'leftArmMusclePct'],
+      ['lowerMusclePct', 'rightLegMusclePct', 'leftLegMusclePct'],
+    ];
+    pairs.forEach(([oldKey, rightKey, leftKey]) => {
+      const oldVal = entry[oldKey];
+      if (oldVal === null || oldVal === undefined) return;
+      if (entry[rightKey] === undefined || entry[rightKey] === null) entry[rightKey] = oldVal;
+      if (entry[leftKey] === undefined || entry[leftKey] === null) entry[leftKey] = oldVal;
+    });
+    return entry;
+  }
+
   function normalizeState(parsed) {
     const base = defaultState();
     if (!parsed) return base;
@@ -97,7 +119,7 @@
     return {
       dailyLogs: parsed.dailyLogs || base.dailyLogs,
       measurements: parsed.measurements || base.measurements,
-      inbody: parsed.inbody || base.inbody,
+      inbody: (parsed.inbody || base.inbody).map(migrateSegmentalFields),
       settings: {
         weeklyWorkoutGoal: parsed.settings?.weeklyWorkoutGoal ?? base.settings.weeklyWorkoutGoal,
         calorieGoal: parsed.settings?.calorieGoal ?? base.settings.calorieGoal,
