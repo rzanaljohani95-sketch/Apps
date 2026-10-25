@@ -2010,6 +2010,12 @@
       case 'empty_completion':
       case 'refused':
         return '⚠️ لم يتمكن المساعد من الإجابة، جرّب صياغة مختلفة.';
+      case 'images_unavailable':
+        return '⚠️ هذا العرض لا يدعم تحليل الصور حاليًا، أدخلي القيم يدويًا.';
+      case 'image_rejected':
+        return '⚠️ تعذّر قبول الصورة المستخرجة من الملف، جرّبي ملفًا آخر أو أدخلي القيم يدويًا.';
+      case 'invalid_json':
+        return '⚠️ تعذّر فهم الأرقام في التقرير بوضوح، تحقّقي من جودة الملف أو أدخلي القيم يدويًا.';
       default:
         return '⚠️ حدث خطأ غير متوقع، حاول مرة أخرى.';
     }
@@ -2127,6 +2133,106 @@
     qaInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') askQuestion();
     });
+  });
+
+  /* ============================ INBODY PDF EXTRACTION ============================ */
+
+  // Renders a PDF's pages to PNG images client-side (pdf.js), then hands them
+  // to Claude's vision via the already-granted `sample` capability to read the
+  // printed numbers off the report — works whether the PDF has a real text
+  // layer or is just a scanned/photographed page, and needs no extra
+  // capability declaration beyond `sample` (already granted for tips/Q&A).
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  async function renderPdfPagesToPngBlobs(arrayBuffer, maxPages) {
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const pageCount = Math.min(pdf.numPages, maxPages);
+    const blobs = [];
+    for (let i = 1; i <= pageCount; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (blob) blobs.push(blob);
+    }
+    return blobs;
+  }
+
+  const INBODY_EXTRACT_PROMPT =
+    'هذه صورة (أو عدة صور لصفحات) من تقرير جهاز قياس تكوين الجسم (إنبودي / InBody). ' +
+    'اقرئي الأرقام المطبوعة في الصورة بدقة وأرجعي كائن JSON واحد فقط بهذه المفاتيح بالضبط، بدون أي نص آخر قبله أو بعده، ' +
+    'وضعي null لأي قيمة غير موجودة أو غير واضحة في الصورة (لا تخترعي أرقامًا):\n' +
+    '{\n' +
+    '  "date": تاريخ القياس المطبوع بصيغة YYYY-MM-DD أو null,\n' +
+    '  "weight": الوزن Weight بالكيلوغرام كرقم,\n' +
+    '  "skeletalMuscleMass": الكتلة العضلية الهيكلية Skeletal Muscle Mass / SMM بالكيلوغرام,\n' +
+    '  "bodyFatMass": كتلة الدهون Body Fat Mass بالكيلوغرام,\n' +
+    '  "bodyFatPct": نسبة الدهون Percent Body Fat / PBF كرقم بدون علامة %,\n' +
+    '  "bmi": مؤشر كتلة الجسم BMI كرقم,\n' +
+    '  "visceralFatLevel": مستوى الدهون الحشوية Visceral Fat Level / VFL كرقم,\n' +
+    '  "bmr": معدل الحرق الأساسي Basal Metabolic Rate / BMR بالسعرات,\n' +
+    '  "totalBodyWater": ماء الجسم الكلي Total Body Water / TBW باللتر\n' +
+    '}';
+
+  document.getElementById('inbodyPdfBtn').addEventListener('click', () => {
+    document.getElementById('inbodyPdfInput').click();
+  });
+
+  document.getElementById('inbodyPdfInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const statusEl = document.getElementById('inbodyPdfStatus');
+
+    if (!sampleCap) { statusEl.textContent = '⚠️ المساعد الذكي غير متاح في هذا العرض، أدخلي القيم يدويًا.'; return; }
+    if (typeof pdfjsLib === 'undefined') { statusEl.textContent = '⚠️ تعذّر تحميل أداة قراءة PDF، أدخلي القيم يدويًا.'; return; }
+
+    statusEl.textContent = '⏳ جاري قراءة الملف...';
+    try {
+      const limits = await sampleCap.limits().catch(() => null);
+      if (!limits || !limits.images) {
+        statusEl.textContent = '⚠️ هذا العرض لا يدعم تحليل الصور حاليًا، أدخلي القيم يدويًا.';
+        return;
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      const blobs = await renderPdfPagesToPngBlobs(arrayBuffer, Math.max(1, Math.min(limits.images.maxCount || 1, 3)));
+      if (blobs.length === 0) {
+        statusEl.textContent = '⚠️ تعذّر تحويل الملف إلى صورة، تأكّدي أنه ملف PDF سليم.';
+        return;
+      }
+
+      statusEl.textContent = '🤔 يتم استخراج الأرقام من التقرير...';
+      const data = await sampleCap.json(INBODY_EXTRACT_PROMPT, { images: blobs, modelTier: 'default' });
+
+      if (data && typeof data === 'object') {
+        if (data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
+          document.getElementById('inbodyDate').value = data.date;
+        }
+        INBODY_FIELDS.forEach(f => {
+          const input = document.getElementById(`ib_${f.key}`);
+          const v = data[f.key];
+          if (input && v !== null && v !== undefined && !Number.isNaN(Number(v))) {
+            input.value = Number(v);
+          }
+        });
+        document.getElementById('inbodyForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        statusEl.textContent = '✅ تمّت التعبئة من التقرير — راجعي الأرقام ثم احفظي.';
+        showToast('تم استخراج الأرقام، راجعيها قبل الحفظ.');
+      } else {
+        statusEl.textContent = '⚠️ تعذّر فهم التقرير، أدخلي القيم يدويًا.';
+      }
+    } catch (err) {
+      console.error('Inbody PDF extraction failed:', err);
+      statusEl.textContent = assistantErrorMessage(err) || '⚠️ تعذّر استخراج الأرقام من الملف، أدخلي القيم يدويًا.';
+    }
   });
 
   /* ============================ RENDER ALL ============================ */

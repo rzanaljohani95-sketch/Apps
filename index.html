@@ -246,6 +246,14 @@
   <section id="tab-inbody" class="tab-panel">
 
     <div class="card">
+      <h2>📄 رفع تقرير إنبودي (PDF)</h2>
+      <p class="muted">ارفعي ملف PDF من تقرير جهاز الإنبودي، وسأقرأ الأرقام من الصورة وأعبّئ النموذج تلقائيًا — راجعي الأرقام قبل الحفظ.</p>
+      <input type="file" id="inbodyPdfInput" accept="application/pdf" class="hidden">
+      <button type="button" id="inbodyPdfBtn" class="btn-secondary">📎 اختيار ملف PDF</button>
+      <div id="inbodyPdfStatus" class="muted"></div>
+    </div>
+
+    <div class="card">
       <h2>🩺 تسجيل قراءة الإنبودي</h2>
       <p class="muted">سجّلي أرقام جهاز الإنبودي كما تظهر في تقريرك.</p>
       <div id="inbodyForm">
@@ -408,6 +416,7 @@
 <div id="toast" class="toast hidden"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
