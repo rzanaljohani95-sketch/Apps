@@ -7,6 +7,7 @@
 
   const MEASURE_FIELDS = [
     { key: 'weight',     label: 'الوزن',            unit: 'كجم', defaultGoal: 'down' },
+    { key: 'neck',       label: 'الرقبة',            unit: 'سم',  defaultGoal: 'down' },
     { key: 'chest',      label: 'الصدر',             unit: 'سم',  defaultGoal: 'down' },
     { key: 'waist',      label: 'الخصر',             unit: 'سم',  defaultGoal: 'down' },
     { key: 'lowerBelly', label: 'أسفل البطن',        unit: 'سم',  defaultGoal: 'down' },
@@ -1030,6 +1031,21 @@
 
   document.getElementById('measureDate').value = todayStr();
 
+  // Shows the most recent recorded value as a placeholder (grey hint, not
+  // a real value) so she has her last reading for reference without
+  // needing to look it up separately — not auto-filled, so an unchanged
+  // field never gets silently resubmitted as if it were measured again.
+  function updateMeasurePlaceholders() {
+    const sorted = [...state.measurements].sort((a, b) => a.date.localeCompare(b.date));
+    const latest = sorted[sorted.length - 1];
+    MEASURE_FIELDS.forEach(f => {
+      const input = document.getElementById(`m_${f.key}`);
+      if (!input) return;
+      const prior = latest ? latest[f.key] : null;
+      input.placeholder = prior !== null && prior !== undefined ? String(prior) : '—';
+    });
+  }
+
   let editingMeasurementId = null;
 
   // Flags a measurement that jumped an unusual amount from the last one on
@@ -1827,6 +1843,7 @@
     renderMeasureTable();
     renderDeltaSummary();
     renderMeasureOverview();
+    updateMeasurePlaceholders();
   }
 
   renderAll();
