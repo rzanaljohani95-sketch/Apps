@@ -2181,58 +2181,182 @@
     '  "totalBodyWater": ماء الجسم الكلي Total Body Water / TBW باللتر\n' +
     '}';
 
+  // Each uploaded file becomes a pending review item here — never written to
+  // state.inbody until she explicitly saves it, and never saved with a guessed
+  // date: a reading whose date couldn't be read from the file stays blocked
+  // (visibly flagged) until she fills it in herself, since a wrong default
+  // (e.g. silently using today's date) would corrupt the trend history.
+  let inbodyPdfQueue = []; // [{ uid, fileName, date, values, error }]
+
+  // Reads whatever she may have edited in the still-open review cards back
+  // into inbodyPdfQueue before any array mutation or re-render, so editing
+  // one card while another file is still being processed (or being saved)
+  // never gets silently overwritten.
+  function syncPdfQueueDomToState() {
+    inbodyPdfQueue.forEach(item => {
+      if (item.error) return;
+      const dateInput = document.getElementById(`pdfq_${item.uid}_date`);
+      if (dateInput) item.date = dateInput.value || null;
+      INBODY_FIELDS.forEach(f => {
+        const input = document.getElementById(`pdfq_${item.uid}_${f.key}`);
+        if (input) item.values[f.key] = numOrNull(input.value);
+      });
+    });
+  }
+
+  function renderInbodyPdfQueue() {
+    const el = document.getElementById('inbodyPdfQueue');
+    if (!el) return;
+    if (inbodyPdfQueue.length === 0) { el.innerHTML = ''; return; }
+
+    const hasSavable = inbodyPdfQueue.some(q => !q.error);
+    el.innerHTML = inbodyPdfQueue.map(item => {
+      if (item.error) {
+        return `
+          <div class="pdf-queue-item" id="pdfq-item-${item.uid}">
+            <div class="pdf-queue-head">📄 ${item.fileName}</div>
+            <p class="pdf-queue-warning">⚠️ ${item.error}</p>
+            <div class="pdf-queue-actions">
+              <button type="button" class="btn-secondary" data-pdfq-discard="${item.uid}">🗑️ تجاهل</button>
+            </div>
+          </div>
+        `;
+      }
+      const missingDate = !item.date;
+      return `
+        <div class="pdf-queue-item ${missingDate ? 'needs-date' : ''}" id="pdfq-item-${item.uid}">
+          <div class="pdf-queue-head">📄 ${item.fileName}</div>
+          ${missingDate ? `<p class="pdf-queue-warning">⚠️ لم يُعثر على تاريخ القياس في هذا الملف — تاريخ القياس ضروري، أدخليه قبل الحفظ.</p>` : ''}
+          <div class="field">
+            <label for="pdfq_${item.uid}_date">تاريخ القراءة</label>
+            <input type="date" id="pdfq_${item.uid}_date" value="${item.date || ''}">
+          </div>
+          <div class="grid-4">
+            ${INBODY_FIELDS.map(f => `
+              <div class="field">
+                <label for="pdfq_${item.uid}_${f.key}">${f.label}${f.unit ? ` (${f.unit})` : ''}</label>
+                <input type="number" step="0.1" min="0" id="pdfq_${item.uid}_${f.key}" value="${item.values[f.key] ?? ''}" placeholder="—">
+              </div>
+            `).join('')}
+          </div>
+          <div class="pdf-queue-actions">
+            <button type="button" class="btn-primary" data-pdfq-save="${item.uid}">💾 حفظ هذه القراءة</button>
+            <button type="button" class="btn-secondary" data-pdfq-discard="${item.uid}">🗑️ تجاهل</button>
+          </div>
+        </div>
+      `;
+    }).join('') + (hasSavable ? `
+      <div class="pdf-queue-actions">
+        <button type="button" class="btn-primary" id="pdfqSaveAllBtn">💾 حفظ كل القراءات الجاهزة</button>
+      </div>
+    ` : '');
+
+    el.querySelectorAll('[data-pdfq-save]').forEach(btn => {
+      btn.addEventListener('click', () => commitPdfQueueItem(btn.dataset.pdfqSave));
+    });
+    el.querySelectorAll('[data-pdfq-discard]').forEach(btn => {
+      btn.addEventListener('click', () => discardPdfQueueItem(btn.dataset.pdfqDiscard));
+    });
+    const saveAllBtn = document.getElementById('pdfqSaveAllBtn');
+    if (saveAllBtn) saveAllBtn.addEventListener('click', commitAllReadyPdfQueueItems);
+  }
+
+  function discardPdfQueueItem(uid) {
+    syncPdfQueueDomToState();
+    inbodyPdfQueue = inbodyPdfQueue.filter(q => q.uid !== uid);
+    renderInbodyPdfQueue();
+  }
+
+  function commitPdfQueueItem(uid) {
+    syncPdfQueueDomToState();
+    const item = inbodyPdfQueue.find(q => q.uid === uid);
+    if (!item || item.error) return;
+    if (!item.date) {
+      showToast('⚠️ تاريخ القياس ضروري قبل الحفظ — أدخليه أولًا.');
+      document.getElementById(`pdfq_${uid}_date`)?.focus();
+      return;
+    }
+    const entry = { id: `${item.date}-${Date.now()}-${item.uid}`, date: item.date, ...item.values };
+    state.inbody.push(entry);
+    state.inbody.sort((a, b) => a.date.localeCompare(b.date));
+    saveState();
+    inbodyPdfQueue = inbodyPdfQueue.filter(q => q.uid !== uid);
+    renderInbodyPdfQueue();
+    renderAll();
+    showToast(`تم حفظ القراءة (${item.fileName}).`);
+  }
+
+  function commitAllReadyPdfQueueItems() {
+    syncPdfQueueDomToState();
+    const ready = inbodyPdfQueue.filter(q => !q.error && q.date);
+    const missing = inbodyPdfQueue.filter(q => !q.error && !q.date).length;
+    if (ready.length === 0) {
+      showToast(missing ? '⚠️ كل القراءات المتبقية بحاجة لتاريخ القياس قبل الحفظ.' : 'لا توجد قراءات جاهزة للحفظ.');
+      return;
+    }
+    ready.forEach(item => {
+      state.inbody.push({ id: `${item.date}-${Date.now()}-${item.uid}`, date: item.date, ...item.values });
+    });
+    state.inbody.sort((a, b) => a.date.localeCompare(b.date));
+    saveState();
+    inbodyPdfQueue = inbodyPdfQueue.filter(q => q.error || !q.date);
+    renderInbodyPdfQueue();
+    renderAll();
+    showToast(`تم حفظ ${ready.length} قراءة.` + (missing ? ` وتبقّى ${missing} بحاجة لتاريخ.` : ''));
+  }
+
   document.getElementById('inbodyPdfBtn').addEventListener('click', () => {
     document.getElementById('inbodyPdfInput').click();
   });
 
   document.getElementById('inbodyPdfInput').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (!file) return;
+    if (files.length === 0) return;
     const statusEl = document.getElementById('inbodyPdfStatus');
 
     if (!sampleCap) { statusEl.textContent = '⚠️ المساعد الذكي غير متاح في هذا العرض، أدخلي القيم يدويًا.'; return; }
     if (typeof pdfjsLib === 'undefined') { statusEl.textContent = '⚠️ تعذّر تحميل أداة قراءة PDF، أدخلي القيم يدويًا.'; return; }
 
-    statusEl.textContent = '⏳ جاري قراءة الملف...';
-    try {
-      const limits = await sampleCap.limits().catch(() => null);
-      if (!limits || !limits.images) {
-        statusEl.textContent = '⚠️ هذا العرض لا يدعم تحليل الصور حاليًا، أدخلي القيم يدويًا.';
-        return;
-      }
-
-      const arrayBuffer = await file.arrayBuffer();
-      const blobs = await renderPdfPagesToPngBlobs(arrayBuffer, Math.max(1, Math.min(limits.images.maxCount || 1, 3)));
-      if (blobs.length === 0) {
-        statusEl.textContent = '⚠️ تعذّر تحويل الملف إلى صورة، تأكّدي أنه ملف PDF سليم.';
-        return;
-      }
-
-      statusEl.textContent = '🤔 يتم استخراج الأرقام من التقرير...';
-      const data = await sampleCap.json(INBODY_EXTRACT_PROMPT, { images: blobs, modelTier: 'default' });
-
-      if (data && typeof data === 'object') {
-        if (data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
-          document.getElementById('inbodyDate').value = data.date;
-        }
-        INBODY_FIELDS.forEach(f => {
-          const input = document.getElementById(`ib_${f.key}`);
-          const v = data[f.key];
-          if (input && v !== null && v !== undefined && !Number.isNaN(Number(v))) {
-            input.value = Number(v);
-          }
-        });
-        document.getElementById('inbodyForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        statusEl.textContent = '✅ تمّت التعبئة من التقرير — راجعي الأرقام ثم احفظي.';
-        showToast('تم استخراج الأرقام، راجعيها قبل الحفظ.');
-      } else {
-        statusEl.textContent = '⚠️ تعذّر فهم التقرير، أدخلي القيم يدويًا.';
-      }
-    } catch (err) {
-      console.error('Inbody PDF extraction failed:', err);
-      statusEl.textContent = assistantErrorMessage(err) || '⚠️ تعذّر استخراج الأرقام من الملف، أدخلي القيم يدويًا.';
+    const limits = await sampleCap.limits().catch(() => null);
+    if (!limits || !limits.images) {
+      statusEl.textContent = '⚠️ هذا العرض لا يدعم تحليل الصور حاليًا، أدخلي القيم يدويًا.';
+      return;
     }
+    const maxPages = Math.max(1, Math.min(limits.images.maxCount || 1, 3));
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      statusEl.textContent = `⏳ جاري معالجة الملف ${i + 1} من ${files.length}: ${file.name}`;
+      const uid = `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`;
+      let entry;
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const blobs = await renderPdfPagesToPngBlobs(arrayBuffer, maxPages);
+        if (blobs.length === 0) throw { code: 'render_failed' };
+
+        const data = await sampleCap.json(INBODY_EXTRACT_PROMPT, { images: blobs, modelTier: 'default' });
+        const values = {};
+        INBODY_FIELDS.forEach(f => {
+          const v = data && data[f.key];
+          values[f.key] = (v !== null && v !== undefined && !Number.isNaN(Number(v))) ? Number(v) : null;
+        });
+        const date = (data && data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) ? data.date : null;
+        entry = { uid, fileName: file.name, date, values, error: null };
+      } catch (err) {
+        console.error('Inbody PDF extraction failed for', file.name, err);
+        const msg = (err && err.code === 'render_failed')
+          ? 'تعذّر تحويل الملف إلى صورة، تأكّدي أنه ملف PDF سليم.'
+          : (assistantErrorMessage(err) || 'تعذّر استخراج الأرقام من هذا الملف.');
+        entry = { uid, fileName: file.name, error: msg };
+      }
+      syncPdfQueueDomToState(); // keep edits made to already-shown cards while this file was processing
+      inbodyPdfQueue.push(entry);
+      renderInbodyPdfQueue();
+    }
+
+    statusEl.textContent = '✅ راجعي القراءات المستخرجة أدناه وتأكّدي من تاريخ كل واحدة قبل الحفظ.';
+    document.getElementById('inbodyPdfQueue').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   /* ============================ RENDER ALL ============================ */

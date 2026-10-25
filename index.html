@@ -246,11 +246,12 @@
   <section id="tab-inbody" class="tab-panel">
 
     <div class="card">
-      <h2>📄 رفع تقرير إنبودي (PDF)</h2>
-      <p class="muted">ارفعي ملف PDF من تقرير جهاز الإنبودي، وسأقرأ الأرقام من الصورة وأعبّئ النموذج تلقائيًا — راجعي الأرقام قبل الحفظ.</p>
-      <input type="file" id="inbodyPdfInput" accept="application/pdf" class="hidden">
-      <button type="button" id="inbodyPdfBtn" class="btn-secondary">📎 اختيار ملف PDF</button>
+      <h2>📄 رفع تقارير إنبودي (PDF)</h2>
+      <p class="muted">ارفعي ملف PDF واحدًا أو عدة ملفات دفعة واحدة، وسأقرأ الأرقام من كل تقرير على حدة وأعرضها هنا للمراجعة. تاريخ القياس ضروري لكل قراءة — إذا لم أجده في الملف، أدخليه يدويًا قبل الحفظ.</p>
+      <input type="file" id="inbodyPdfInput" accept="application/pdf" multiple class="hidden">
+      <button type="button" id="inbodyPdfBtn" class="btn-secondary">📎 اختيار ملف أو ملفات PDF</button>
       <div id="inbodyPdfStatus" class="muted"></div>
+      <div id="inbodyPdfQueue" class="pdf-queue"></div>
     </div>
 
     <div class="card">
