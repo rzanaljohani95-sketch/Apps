@@ -15,6 +15,7 @@
 <nav class="tabs">
   <button class="tab-btn active" data-tab="today">📅 اليوم</button>
   <button class="tab-btn" data-tab="measurements">📏 القياسات</button>
+  <button class="tab-btn" data-tab="inbody">🩺 الإنبودي</button>
   <button class="tab-btn" data-tab="history">🗂️ السجل</button>
 </nav>
 
@@ -129,7 +130,7 @@
 
     <div class="card">
       <h2>🧠 نصائح احترافية</h2>
-      <p class="muted">تحليل مبني على كل بياناتك: انتظامك بالتسجيل، والتزامك بالتمرين والسعرات والبروتين.</p>
+      <p class="muted">تحليل شامل يجمع لياقتك العامة، وقياسات الجسم بالمتر، وقراءات الإنبودي، مع فرص تطوير محدّدة في كل جانب.</p>
       <button type="button" id="tipsTodayBtn" class="btn-primary">✨ احصل على نصائح</button>
       <div class="assistant-qa">
         <input type="text" id="qaInputToday" placeholder="عندك سؤال؟ اكتبيه هنا...">
@@ -239,15 +240,46 @@
       </div>
     </div>
 
+  </section>
+
+  <!-- ===================== INBODY TAB ===================== -->
+  <section id="tab-inbody" class="tab-panel">
+
     <div class="card">
-      <h2>🧠 نصائح احترافية</h2>
-      <p class="muted">تحليل مبني على كل قياساتك: اتجاه التغيّر عبر الوقت مقارنة بأهدافك.</p>
-      <button type="button" id="tipsMeasureBtn" class="btn-primary">✨ احصل على نصائح</button>
-      <div class="assistant-qa">
-        <input type="text" id="qaInputMeasure" placeholder="عندك سؤال؟ اكتبيه هنا...">
-        <button type="button" id="qaBtnMeasure" class="btn-secondary">❓ اسأل</button>
+      <h2>🩺 تسجيل قراءة الإنبودي</h2>
+      <p class="muted">سجّلي أرقام جهاز الإنبودي كما تظهر في تقريرك.</p>
+      <div id="inbodyForm">
+        <div class="field">
+          <label for="inbodyDate">تاريخ القراءة</label>
+          <input type="date" id="inbodyDate">
+        </div>
+        <div class="grid-4" id="inbodyFields"></div>
+        <div class="modal-actions">
+          <button type="button" id="inbodySaveBtn" class="btn-primary">حفظ القراءة</button>
+          <button type="button" id="inbodyCancelEditBtn" class="btn-secondary hidden">إلغاء التعديل</button>
+        </div>
       </div>
-      <div id="tipsMeasureOutput" class="assistant-output"></div>
+    </div>
+
+    <div class="card">
+      <h2>📈 نظرة عامة على الإنبودي</h2>
+      <div id="inbodyOverviewGrid" class="mo-grid"></div>
+      <p id="inbodyChartEmptyMsg" class="muted hidden">لا توجد قراءات بعد — سجّلي قراءة واحدة على الأقل ليبدأ التتبع هنا.</p>
+    </div>
+
+    <div class="card">
+      <h2>🔄 ملخّص آخر تغيّر</h2>
+      <div id="inbodyDeltaSummary" class="delta-grid"></div>
+    </div>
+
+    <div class="card">
+      <h2>🗂️ سجل قراءات الإنبودي</h2>
+      <div class="table-wrap">
+        <table id="inbodyTable">
+          <thead><tr id="inbodyTableHead"></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
@@ -271,17 +303,6 @@
           <tbody></tbody>
         </table>
       </div>
-    </div>
-
-    <div class="card">
-      <h2>🧠 نصائح احترافية</h2>
-      <p class="muted">تحليل مبني على كل سجلك: نمط الالتزام والانتظام على المدى الأطول.</p>
-      <button type="button" id="tipsHistoryBtn" class="btn-primary">✨ احصل على نصائح</button>
-      <div class="assistant-qa">
-        <input type="text" id="qaInputHistory" placeholder="عندك سؤال؟ اكتبيه هنا...">
-        <button type="button" id="qaBtnHistory" class="btn-secondary">❓ اسأل</button>
-      </div>
-      <div id="tipsHistoryOutput" class="assistant-output"></div>
     </div>
   </section>
 

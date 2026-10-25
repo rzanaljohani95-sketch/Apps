@@ -17,10 +17,30 @@
     { key: 'calves',     label: 'البطات',            unit: 'سم',  defaultGoal: 'up'   },
   ];
 
+  const INBODY_FIELDS = [
+    { key: 'weight',             label: 'الوزن',              unit: 'كجم',   defaultGoal: 'down' },
+    { key: 'skeletalMuscleMass', label: 'الكتلة العضلية',     unit: 'كجم',   defaultGoal: 'up'   },
+    { key: 'bodyFatMass',        label: 'كتلة الدهون',        unit: 'كجم',   defaultGoal: 'down' },
+    { key: 'bodyFatPct',         label: 'نسبة الدهون',        unit: '%',     defaultGoal: 'down' },
+    { key: 'bmi',                label: 'مؤشر كتلة الجسم',    unit: '',      defaultGoal: 'down' },
+    { key: 'visceralFatLevel',   label: 'الدهون الحشوية',     unit: '',      defaultGoal: 'down' },
+    { key: 'bmr',                label: 'معدل الحرق الأساسي', unit: 'سعرة',  defaultGoal: 'up'   },
+    { key: 'totalBodyWater',     label: 'ماء الجسم',          unit: 'لتر',   defaultGoal: 'up'   },
+  ];
+
+  // MEASURE_FIELDS and INBODY_FIELDS both have a 'weight' entry (same real-world
+  // quantity, one goal direction) — de-duplicated by key for anything that lists
+  // every trackable field once, like the settings' goal-direction picker.
+  const ALL_GOAL_FIELDS = [...MEASURE_FIELDS];
+  INBODY_FIELDS.forEach(f => {
+    if (!ALL_GOAL_FIELDS.some(x => x.key === f.key)) ALL_GOAL_FIELDS.push(f);
+  });
+
   function defaultState() {
     return {
       dailyLogs: {},      // { 'YYYY-MM-DD': { steps, calories, protein, workout: {done, type, duration, notes} } }
       measurements: [],   // [{ id, date, weight, chest, waist, lowerBelly, hips, thigh, arm, calves }]
+      inbody: [],         // [{ id, date, weight, skeletalMuscleMass, bodyFatMass, bodyFatPct, bmi, visceralFatLevel, bmr, totalBodyWater }]
       settings: {
         weeklyWorkoutGoal: 4,
         calorieGoal: 1810,
@@ -30,7 +50,7 @@
         proteinGoal: 100,
         calorieMarginPct: 5,
         proteinMarginPct: 0,
-        goalDirections: Object.fromEntries(MEASURE_FIELDS.map(f => [f.key, f.defaultGoal])),
+        goalDirections: Object.fromEntries(ALL_GOAL_FIELDS.map(f => [f.key, f.defaultGoal])),
         // Known period/cycle length from the user's own tracking history —
         // used instead of the computed average until enough logged periods
         // build up their own average (see computeCycleInfo).
@@ -56,6 +76,7 @@
     return {
       dailyLogs: parsed.dailyLogs || base.dailyLogs,
       measurements: parsed.measurements || base.measurements,
+      inbody: parsed.inbody || base.inbody,
       settings: {
         weeklyWorkoutGoal: parsed.settings?.weeklyWorkoutGoal ?? base.settings.weeklyWorkoutGoal,
         calorieGoal: parsed.settings?.calorieGoal ?? base.settings.calorieGoal,
@@ -720,27 +741,45 @@
     });
   }
 
+  // Her real sessions never run under 30 minutes, so anything logged under
+  // this is almost certainly a typo in the hours/minutes fields rather than
+  // an actually short workout — worth a confirm instead of saving silently.
+  const SHORT_WORKOUT_THRESHOLD_MIN = 20;
+
   document.getElementById('dailySaveBtn').addEventListener('click', () => {
     try {
       const date = dailyDateInput.value;
       if (!date) { showToast('اختر التاريخ أولًا.'); return; }
 
-      state.dailyLogs[date] = {
-        steps: numOrNull(document.getElementById('steps').value),
-        calories: numOrNull(document.getElementById('calories').value),
-        protein: numOrNull(document.getElementById('protein').value),
-        workout: {
-          done: workoutDoneInput.checked,
-          type: document.getElementById('workoutType').value.trim(),
-          duration: readWorkoutDurationMinutes(),
-          notes: document.getElementById('workoutNotes').value.trim(),
-          hiit: document.getElementById('workoutHiit').checked,
-        },
-        onPeriod: onPeriodInput.checked,
+      const duration = readWorkoutDurationMinutes();
+
+      const proceed = () => {
+        state.dailyLogs[date] = {
+          steps: numOrNull(document.getElementById('steps').value),
+          calories: numOrNull(document.getElementById('calories').value),
+          protein: numOrNull(document.getElementById('protein').value),
+          workout: {
+            done: workoutDoneInput.checked,
+            type: document.getElementById('workoutType').value.trim(),
+            duration,
+            notes: document.getElementById('workoutNotes').value.trim(),
+            hiit: document.getElementById('workoutHiit').checked,
+          },
+          onPeriod: onPeriodInput.checked,
+        };
+        saveState();
+        renderAll();
+        showToast('تم حفظ يوم ' + formatDateAr(date) + '.');
       };
-      saveState();
-      renderAll();
-      showToast('تم حفظ يوم ' + formatDateAr(date) + '.');
+
+      if (workoutDoneInput.checked && duration !== null && duration < SHORT_WORKOUT_THRESHOLD_MIN) {
+        showConfirm(
+          `⚠️ مدة التمرين المسجّلة ${formatDuration(duration)} فقط، وهذا أقل من المعتاد (جلساتك عادة لا تقل عن 30 دقيقة). تأكّدي من مدة الساعات/الدقائق — هل تحفظين كما هي؟`,
+          proceed
+        );
+      } else {
+        proceed();
+      }
     } catch (err) {
       console.error('Daily save failed:', err);
       showToast('⚠️ فشل الحفظ: ' + (err && err.message ? err.message : String(err)), 8000);
@@ -1343,6 +1382,261 @@
     }).join('');
   }
 
+  /* ============================ INBODY FORM ============================ */
+
+  const inbodyFieldsEl = document.getElementById('inbodyFields');
+  inbodyFieldsEl.innerHTML = INBODY_FIELDS.map(f => `
+    <div class="field">
+      <label for="ib_${f.key}">${f.label}${f.unit ? ` (${f.unit})` : ''}</label>
+      <input type="number" step="0.1" min="0" id="ib_${f.key}" placeholder="—">
+    </div>
+  `).join('');
+
+  document.getElementById('inbodyDate').value = todayStr();
+
+  function updateInbodyPlaceholders() {
+    const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
+    const latest = sorted[sorted.length - 1];
+    INBODY_FIELDS.forEach(f => {
+      const input = document.getElementById(`ib_${f.key}`);
+      if (!input) return;
+      const prior = latest ? latest[f.key] : null;
+      input.placeholder = prior !== null && prior !== undefined ? String(prior) : '—';
+    });
+  }
+
+  let editingInbodyId = null;
+
+  function readInbodyFormValues() {
+    const values = {};
+    INBODY_FIELDS.forEach(f => {
+      const input = document.getElementById(`ib_${f.key}`);
+      values[f.key] = input ? numOrNull(input.value) : null;
+    });
+    return values;
+  }
+
+  function clearInbodyForm() {
+    INBODY_FIELDS.forEach(f => {
+      const input = document.getElementById(`ib_${f.key}`);
+      if (input) input.value = '';
+    });
+    document.getElementById('inbodyDate').value = todayStr();
+  }
+
+  function startEditInbody(id) {
+    const r = state.inbody.find(x => x.id === id);
+    if (!r) return;
+    editingInbodyId = id;
+    document.getElementById('inbodyDate').value = r.date;
+    INBODY_FIELDS.forEach(f => {
+      const input = document.getElementById(`ib_${f.key}`);
+      if (input) input.value = r[f.key] ?? '';
+    });
+    document.getElementById('inbodySaveBtn').textContent = '💾 حفظ التعديلات';
+    document.getElementById('inbodyCancelEditBtn').classList.remove('hidden');
+    document.getElementById('inbodyForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('وضع التعديل مفعّل — عدّلي القيم واحفظي.');
+  }
+
+  function cancelEditInbody() {
+    editingInbodyId = null;
+    document.getElementById('inbodySaveBtn').textContent = 'حفظ القراءة';
+    document.getElementById('inbodyCancelEditBtn').classList.add('hidden');
+    clearInbodyForm();
+  }
+
+  document.getElementById('inbodyCancelEditBtn').addEventListener('click', cancelEditInbody);
+
+  document.getElementById('inbodySaveBtn').addEventListener('click', () => {
+    try {
+      const date = document.getElementById('inbodyDate').value;
+      if (!date) { showToast('اختر تاريخ القراءة أولًا.'); return; }
+      const values = readInbodyFormValues();
+
+      if (editingInbodyId) {
+        const existing = state.inbody.find(r => r.id === editingInbodyId);
+        if (!existing) { cancelEditInbody(); showToast('تعذّر إيجاد القراءة، حاولي من جديد.'); return; }
+        Object.assign(existing, { date, ...values });
+        state.inbody.sort((a, b) => a.date.localeCompare(b.date));
+        saveState();
+        cancelEditInbody();
+        renderAll();
+        showToast('تم تحديث القراءة.');
+        return;
+      }
+
+      const entry = { id: `${date}-${Date.now()}`, date, ...values };
+      clearInbodyForm();
+      state.inbody.push(entry);
+      state.inbody.sort((a, b) => a.date.localeCompare(b.date));
+      saveState();
+      renderAll();
+      showToast('تم حفظ القراءة.');
+    } catch (err) {
+      console.error('Inbody save failed:', err);
+      showToast('⚠️ فشل الحفظ: ' + (err && err.message ? err.message : String(err)), 8000);
+    }
+  });
+
+  function deleteInbody(id) {
+    showConfirm('حذف هذه القراءة؟', () => {
+      state.inbody = state.inbody.filter(r => r.id !== id);
+      if (id === editingInbodyId) cancelEditInbody();
+      saveState();
+      renderAll();
+      showToast('تم الحذف.');
+    });
+  }
+
+  let inbodySortKey = 'date';
+  let inbodySortDir = 'desc';
+
+  function renderInbodyTable() {
+    const head = document.getElementById('inbodyTableHead');
+    const arrowFor = key => inbodySortKey === key ? (inbodySortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    head.innerHTML = `<th class="sortable" data-sort="date">التاريخ${arrowFor('date')}</th>` +
+      INBODY_FIELDS.map(f => `<th class="sortable" data-sort="${f.key}">${f.label}${arrowFor(f.key)}</th>`).join('') +
+      `<th></th>`;
+    head.querySelectorAll('[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (inbodySortKey === key) {
+          inbodySortDir = inbodySortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          inbodySortKey = key;
+          inbodySortDir = key === 'date' ? 'desc' : 'asc';
+        }
+        renderInbodyTable();
+      });
+    });
+
+    const tbody = document.querySelector('#inbodyTable tbody');
+    const rows = [...state.inbody].sort((a, b) => {
+      const av = a[inbodySortKey], bv = b[inbodySortKey];
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
+      if (av < bv) return inbodySortDir === 'asc' ? -1 : 1;
+      if (av > bv) return inbodySortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${formatDateAr(r.date)}</td>
+        ${INBODY_FIELDS.map(f => `<td>${r[f.key] ?? '—'}</td>`).join('')}
+        <td class="row-actions">
+          <button class="btn-icon-small" data-edit="${r.id}" title="تعديل">✏️</button>
+          <button class="btn-icon-small" data-del="${r.id}" title="حذف">🗑️</button>
+        </td>
+      </tr>
+    `).join('') || `<tr><td colspan="${INBODY_FIELDS.length + 2}" class="muted">لا توجد قراءات بعد</td></tr>`;
+
+    tbody.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', () => deleteInbody(btn.dataset.del));
+    });
+    tbody.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => startEditInbody(btn.dataset.edit));
+    });
+  }
+
+  function renderInbodyDeltaSummary() {
+    const el = document.getElementById('inbodyDeltaSummary');
+    const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
+    if (sorted.length === 0) {
+      el.innerHTML = `<p class="muted">سجّلي قراءة واحدة على الأقل لعرض الملخص.</p>`;
+      return;
+    }
+    const latest = sorted[sorted.length - 1];
+    const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
+
+    el.innerHTML = INBODY_FIELDS.map(f => {
+      const cur = latest[f.key];
+      const prior = prev ? prev[f.key] : null;
+      if (cur === null || cur === undefined) {
+        return `<div class="delta-card"><div class="delta-name">${f.label}</div><div class="delta-value muted">لا يوجد</div></div>`;
+      }
+      if (prior === null || prior === undefined) {
+        return `<div class="delta-card"><div class="delta-name">${f.label}</div><div class="delta-value">${cur} ${f.unit}</div></div>`;
+      }
+      const diff = round1(cur - prior);
+      let cls = 'delta-flat';
+      let arrow = '→';
+      if (diff > 0) { arrow = '▲'; cls = 'delta-up'; }
+      else if (diff < 0) { arrow = '▼'; cls = 'delta-down'; }
+
+      let goalCls = '';
+      const goal = state.settings.goalDirections[f.key];
+      if (diff !== 0 && goal) {
+        const improved = (goal === 'down' && diff < 0) || (goal === 'up' && diff > 0);
+        goalCls = improved ? 'delta-good' : 'delta-bad';
+      }
+
+      return `<div class="delta-card">
+        <div class="delta-name">${f.label}</div>
+        <div class="delta-value">${cur} ${f.unit}</div>
+        <div class="delta-value ${goalCls || cls}">${arrow} ${diff > 0 ? '+' : ''}${diff}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderInbodyOverview() {
+    const el = document.getElementById('inbodyOverviewGrid');
+    const emptyMsg = document.getElementById('inbodyChartEmptyMsg');
+    if (state.inbody.length === 0) {
+      el.innerHTML = '';
+      emptyMsg.classList.remove('hidden');
+      return;
+    }
+    emptyMsg.classList.add('hidden');
+
+    const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
+
+    el.innerHTML = INBODY_FIELDS.map(f => {
+      const points = sorted.filter(r => r[f.key] !== null && r[f.key] !== undefined);
+      if (points.length === 0) {
+        return `
+          <div class="mo-card">
+            <div class="mo-header"><span class="mo-label">${f.label}</span></div>
+            <p class="muted mo-empty">لا توجد قراءة بعد</p>
+          </div>
+        `;
+      }
+
+      const values = points.map(p => p[f.key]);
+      const latest = values[values.length - 1];
+      const first = values[0];
+      const diff = round1(latest - first);
+      const goal = state.settings.goalDirections[f.key];
+      let deltaCls = 'flat';
+      if (diff !== 0 && goal) {
+        const improved = (goal === 'down' && diff < 0) || (goal === 'up' && diff > 0);
+        deltaCls = improved ? 'good' : 'bad';
+      }
+      const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '→';
+
+      const sparkline = points.length >= 2
+        ? `<svg viewBox="0 0 100 32" class="mo-spark mo-spark-${deltaCls}" preserveAspectRatio="none">
+             <path d="${buildSparklinePath(values, 100, 32, 4)}"/>
+           </svg>`
+        : `<p class="muted mo-empty">قراءة واحدة فقط لحد الآن</p>`;
+
+      const deltaLine = points.length >= 2
+        ? `<div class="mo-delta ${deltaCls}">${arrow} ${diff > 0 ? '+' : ''}${diff} ${f.unit} منذ أول قراءة</div>`
+        : '';
+
+      return `
+        <div class="mo-card">
+          <div class="mo-header">
+            <span class="mo-label">${f.label}</span>
+            <span class="mo-latest">${latest} ${f.unit}</span>
+          </div>
+          ${sparkline}
+          ${deltaLine}
+        </div>
+      `;
+    }).join('');
+  }
+
   /* ============================ SETTINGS MODAL ============================ */
 
   const settingsModal = document.getElementById('settingsModal');
@@ -1371,7 +1665,7 @@
     document.getElementById('periodLenInput').value = state.settings.periodLenOverride ?? '';
     document.getElementById('cycleLenInput').value = state.settings.cycleLenOverride ?? '';
     const el = document.getElementById('goalDirections');
-    el.innerHTML = MEASURE_FIELDS.map(f => `
+    el.innerHTML = ALL_GOAL_FIELDS.map(f => `
       <div class="goal-direction-row">
         <span>${f.label}</span>
         <select data-goal="${f.key}">
@@ -1652,11 +1946,13 @@
   /* ============================ AI ASSISTANT ============================ */
 
   let sampleCap = null;
-  const TIPS_BUTTON_IDS = ['tipsTodayBtn', 'tipsMeasureBtn', 'tipsHistoryBtn', 'qaBtnToday', 'qaBtnMeasure', 'qaBtnHistory'];
+  const TIPS_BUTTON_IDS = ['tipsTodayBtn', 'qaBtnToday'];
 
   const ASSISTANT_RULES =
     'أنت مساعد صحي ولياقة بدنية شخصي داخل تطبيق متابعة يستخدمه شخص واحد. ' +
-    'أمامك بيانات المستخدم الفعلية بصيغة JSON (آخر 14 يومًا من سجله اليومي، وآخر قياساته، وأهدافه، ومرحلة دورته الشهرية الحالية إن وُجدت في currentCyclePhase). ' +
+    'أمامك بيانات المستخدم الفعلية بصيغة JSON (آخر 14 يومًا من سجله اليومي، وآخر قياساته بالمتر recentMeasurements، وآخر قراءات جهاز الإنبودي recentInbody، وأهدافه، ومرحلة دورته الشهرية الحالية إن وُجدت في currentCyclePhase). ' +
+    'تحليلك موحّد يغطي ثلاثة جوانب دائمًا عند توفر بياناتها: اللياقة العامة (الانتظام، التمرين، السعرات، البروتين، الخطوات)، وقياسات الجسم بالمتر، وقراءات الإنبودي (الوزن، الكتلة العضلية، نسبة ومستوى الدهون، الدهون الحشوية، معدل الحرق، ماء الجسم). ' +
+    'لكل جانب من هذه الثلاثة اذكري فرصة تطوير واحدة محدّدة وقابلة للتنفيذ مبنية على أرقامه الفعلية، لا نصيحة عامة. ' +
     'اعتمد فقط على هذه الأرقام — لا تخترع بيانات غير موجودة، ولا تقدّم نصائح طبية عامة لا علاقة لها بالأرقام المعطاة. ' +
     'ضروري دائمًا مراعاة تقلبات الشهية والطاقة المرتبطة بالدورة الشهرية — لا تكتفي بذكر هذا أحيانًا، بل افحصي عند أي تذبذب بالسعرات أو البروتين أو شدة التمرين أو الخطوات هل يتزامن مع مرحلة معينة (خصوصًا الدورة أو المرحلة الأصفرية قبلها)، واذكري هذا كتفسير محتمل وطبيعي بدل تركه يبدو كتراجع أو تقصير. استخدمي currentCyclePhase وأيام onPeriod بالسجل اليومي لهذا الغرض كلما توفّرت، دون تقديم تشخيص طبي أو مبالغة. ' +
     'إن سُئلت عن شيء خارج بيانات اللياقة/الصحة المتاحة هنا، وضّح بأدب أنك مخصص لتحليل بيانات هذا التطبيق فقط. ' +
@@ -1669,6 +1965,9 @@
     const dates = Object.keys(state.dailyLogs).sort().slice(-14);
     const dailyLogsLast14Days = dates.map(d => ({ date: d, ...state.dailyLogs[d] }));
     const recentMeasurements = [...state.measurements]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-6);
+    const recentInbody = [...state.inbody]
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(-6);
     const cycleInfo = computeCycleInfo(todayStr());
@@ -1684,6 +1983,7 @@
       measurementGoalDirections: state.settings.goalDirections,
       dailyLogsLast14Days,
       recentMeasurements,
+      recentInbody,
       currentCyclePhase: cycleInfo ? { phase: cycleInfo.phase, cycleDay: cycleInfo.cycleDay, daysUntilNextPeriod: cycleInfo.daysUntilNextPeriod } : null,
     };
   }
@@ -1748,29 +2048,24 @@
     }
   }
 
-  // One "professional tips" block per tab, all reading the FULL data (not
-  // just that tab's), each focused on what that tab is about.
+  // A single unified "professional tips" block on the main page — one
+  // analysis covering fitness + cm measurements + InBody together (rather
+  // than three separate per-tab analyses that could read as disconnected
+  // or even contradict each other), so there's one coherent goal.
   const TIPS_SECTIONS = [
     {
       btnId: 'tipsTodayBtn',
       outId: 'tipsTodayOutput',
       qaInputId: 'qaInputToday',
       qaBtnId: 'qaBtnToday',
-      focus: 'ركّزي في نصيحتك على: مدى انتظام تسجيله اليومي، واتساق التمرين والسعرات والبروتين مقابل الهدف خلال آخر الأيام المسجّلة. رتّبي نصيحة التمرين نفسها حسب مرحلة الدورة الحالية إن وُجدت currentCyclePhase: بالمرحلة الشهرية اقترحي تمارين أخف (مشي، إطالات) وخففي التوقعات، بالجريبية والإباضة اقترحي زيادة الشدة أو الأحمال تدريجيًا، وبالأصفرية اقترحي شدة متوسطة مع مراعاة التعب المحتمل قرب نهايتها.',
-    },
-    {
-      btnId: 'tipsMeasureBtn',
-      outId: 'tipsMeasureOutput',
-      qaInputId: 'qaInputMeasure',
-      qaBtnId: 'qaBtnMeasure',
-      focus: 'ركّزي في نصيحتك على: اتجاه التغيّر في قياسات الجسم عبر الوقت (تحسّن أو تراجع) مقارنة بهدف كل قياس، وأي قياس يستحق انتباهًا أكبر. إذا توفّرت currentCyclePhase، اربطي بها عند تفسير القياسات: مثلًا ارتفاع طفيف بالوزن أو محيط الخصر/أسفل البطن/الأرداف بالمرحلة الأصفرية أو قرب الدورة قد يكون احتباس ماء مؤقت وليس تراجعًا حقيقيًا، وقد يكون وقت القياس بعد انتهاء الدورة أدق لمتابعة الاتجاه الفعلي.',
-    },
-    {
-      btnId: 'tipsHistoryBtn',
-      outId: 'tipsHistoryOutput',
-      qaInputId: 'qaInputHistory',
-      qaBtnId: 'qaBtnHistory',
-      focus: 'لخّصي أداءه العام على المدى الأطول: الانتظام بالتسجيل، ونمط الالتزام بالتمرين والسعرات والبروتين عبر الأسابيع، وأي اتجاه عام يستحق الانتباه.',
+      focus: 'غطّي الثلاثة جوانب معًا في نصيحة واحدة متكاملة: ' +
+        '(1) اللياقة العامة — مدى انتظام تسجيله اليومي، واتساق التمرين والسعرات والبروتين مقابل الهدف خلال آخر الأيام المسجّلة، ' +
+        '(2) قياسات الجسم بالمتر recentMeasurements — اتجاه التغيّر عبر الوقت مقارنة بهدف كل قياس، ' +
+        '(3) قراءات الإنبودي recentInbody — اتجاه الوزن والكتلة العضلية ونسبة الدهون والدهون الحشوية ومعدل الحرق وماء الجسم عبر الوقت مقارنة بالهدف. ' +
+        'لكل جانب من الثلاثة اذكري فرصة تطوير واحدة محددة وقابلة للتنفيذ. ' +
+        'رتّبي نصيحة التمرين نفسها حسب مرحلة الدورة الحالية إن وُجدت currentCyclePhase: بالمرحلة الشهرية اقترحي تمارين أخف (مشي، إطالات) وخففي التوقعات، بالجريبية والإباضة اقترحي زيادة الشدة أو الأحمال تدريجيًا، وبالأصفرية اقترحي شدة متوسطة مع مراعاة التعب المحتمل قرب نهايتها. ' +
+        'وإذا توفّرت currentCyclePhase، اربطي بها أيضًا عند تفسير القياسات والإنبودي: مثلًا ارتفاع طفيف بالوزن أو محيط الخصر/أسفل البطن/الأرداف أو نسبة ماء الجسم بالمرحلة الأصفرية أو قرب الدورة قد يكون احتباس ماء مؤقت وليس تراجعًا حقيقيًا.' +
+        ' إن لم تتوفر بيانات لأحد الجوانب (مثلًا لا توجد قراءات إنبودي بعد)، تجاوزيه بدون ذكر غيابه كنقص.',
     },
   ];
 
@@ -1787,7 +2082,7 @@
         const prompt =
           ASSISTANT_RULES +
           '\n\n' + focus +
-          ' اكتبي 3 إلى 4 نصائح عملية قصيرة (سطر أو سطرين لكل واحدة)، كل نصيحة تبدأ برمز تعبيري مناسب، سطر مستقل لكل نصيحة، بدون مقدمة أو خاتمة.' +
+          ' اكتبي 4 إلى 6 نصائح عملية قصيرة (سطر أو سطرين لكل واحدة)، كل نصيحة تبدأ برمز تعبيري مناسب، سطر مستقل لكل نصيحة، بدون مقدمة أو خاتمة.' +
           '\n\nبيانات المستخدم:\n' + JSON.stringify(context);
         const { text } = await sampleCap(prompt, {
           modelTier: 'default',
@@ -1847,6 +2142,10 @@
     renderDeltaSummary();
     renderMeasureOverview();
     updateMeasurePlaceholders();
+    renderInbodyTable();
+    renderInbodyDeltaSummary();
+    renderInbodyOverview();
+    updateInbodyPlaceholders();
   }
 
   renderAll();
