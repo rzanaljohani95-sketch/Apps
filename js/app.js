@@ -1377,12 +1377,7 @@
       <text x="${(width - padRight + 6).toFixed(1)}" y="${yFor(t).toFixed(1)}" dy="0.32em" text-anchor="start" class="chart-axis-label">${fmtAxisNum(t)}</text>
     `).join('');
 
-    // A visible 5px dot plus a larger transparent one laid over it as the
-    // actual tap target — a real finger needs more room than the mark itself.
-    const dots = values.map((v, i) => `
-      <circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="5" class="chart-dot"/>
-      <circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="14" class="chart-dot-hit" data-point-idx="${i}"/>
-    `).join('');
+    const dots = values.map((v, i) => `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="5" class="chart-dot"/>`).join('');
 
     const maxXLabels = 4;
     const idxs = n <= maxXLabels
@@ -1393,10 +1388,9 @@
       return `<text x="${xFor(i).toFixed(1)}" y="${(height - 6).toFixed(1)}" text-anchor="${anchor}" class="chart-x-label">${formatDateAr(points[i].date)}</text>`;
     }).join('');
 
-    // Every point gets a badge in the markup, but only the first/last start
-    // visible (per the "label selectively" rule) — tapping a dot reveals its
-    // own badge (see renderBigFieldChart's click wiring below).
-    const badge = (i, alwaysVisible) => {
+    // Every point's value is labeled directly — she wants them all visible
+    // at once, not revealed on demand.
+    const badge = i => {
       const vDisp = Math.round(values[i] * 10) / 10;
       const text = `${vDisp}${unit ? ' ' + unit : ''}`;
       const w = Math.max(34, text.length * 7 + 16);
@@ -1404,12 +1398,12 @@
       const cx = xFor(i), cy = yFor(values[i]);
       const bx = Math.max(2, Math.min(width - w - 2, cx - w / 2));
       const by = Math.max(2, cy - h - 10);
-      return `<g class="chart-badge${alwaysVisible ? '' : ' chart-badge-hidden'}" data-badge-idx="${i}">
+      return `<g class="chart-badge" data-badge-idx="${i}">
         <rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${w}" height="${h}" rx="11" class="chart-badge-bg"/>
         <text x="${(bx + w / 2).toFixed(1)}" y="${(by + h / 2).toFixed(1)}" dy="0.32em" text-anchor="middle" class="chart-badge-text">${text}</text>
       </g>`;
     };
-    const badges = values.map((v, i) => badge(i, i === 0 || i === n - 1)).join('');
+    const badges = values.map((v, i) => badge(i)).join('');
 
     return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="big-chart-svg chart-${statusCls}">
       ${gridLines}
@@ -1443,17 +1437,6 @@
     const canvas = containerEl.querySelector('.big-chart-canvas');
     const width = canvas.clientWidth || 320;
     canvas.innerHTML = buildBigChartSvg(points, field.key, field.unit, width, BIG_CHART_HEIGHT, statusCls);
-
-    const lastIdx = points.length - 1;
-    canvas.querySelectorAll('.chart-dot-hit').forEach(hit => {
-      hit.addEventListener('click', () => {
-        const idx = hit.dataset.pointIdx;
-        canvas.querySelectorAll('.chart-badge').forEach(g => {
-          const isEndpoint = g.dataset.badgeIdx === '0' || g.dataset.badgeIdx === String(lastIdx);
-          g.classList.toggle('chart-badge-hidden', !(isEndpoint || g.dataset.badgeIdx === idx));
-        });
-      });
-    });
   }
 
   let selectedMeasureField = null;

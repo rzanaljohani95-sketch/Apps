@@ -370,10 +370,8 @@ input:focus, textarea:focus, select:focus {
 .chart-area { opacity: 0.12; }
 .chart-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .chart-dot { stroke: var(--surface-2); stroke-width: 2; }
-.chart-dot-hit { fill: transparent; cursor: pointer; }
 .chart-badge-bg { fill: var(--ink); }
 .chart-badge-text { fill: var(--surface); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.chart-badge-hidden { display: none; }
 .chart-good .chart-line { stroke: var(--accent); }
 .chart-good .chart-dot { fill: var(--accent); }
 .chart-good .chart-area { fill: var(--accent); }
