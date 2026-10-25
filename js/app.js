@@ -2165,6 +2165,24 @@
     return blobs;
   }
 
+  // A photo from the phone's gallery/camera is already an image — hand it to
+  // Claude's vision as-is (no PDF rendering needed); only a real PDF goes
+  // through pdf.js. Rejects a file type the current view's `sample` call
+  // can't send as an image (e.g. HEIC, which Claude's vision doesn't accept).
+  async function fileToImageBlobs(file, maxPages, limits) {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (isPdf) {
+      if (typeof pdfjsLib === 'undefined') throw { code: 'pdfjs_unavailable' };
+      const arrayBuffer = await file.arrayBuffer();
+      return await renderPdfPagesToPngBlobs(arrayBuffer, maxPages);
+    }
+    const accepted = limits?.images?.mediaTypes || [];
+    if (accepted.length && !accepted.includes(file.type)) {
+      throw { code: 'image_rejected', message: `نوع الصورة (${file.type || 'غير معروف'}) غير مدعوم` };
+    }
+    return [file];
+  }
+
   const INBODY_EXTRACT_PROMPT =
     'هذه صورة (أو عدة صور لصفحات) من تقرير جهاز قياس تكوين الجسم (إنبودي / InBody). ' +
     'اقرئي الأرقام المطبوعة في الصورة بدقة وأرجعي كائن JSON واحد فقط بهذه المفاتيح بالضبط، بدون أي نص آخر قبله أو بعده، ' +
@@ -2215,7 +2233,7 @@
         return `
           <div class="pdf-queue-item" id="pdfq-item-${item.uid}">
             <div class="pdf-queue-head">📄 ${item.fileName}</div>
-            <p class="pdf-queue-warning">⚠️ ${item.error}</p>
+            <p class="pdf-queue-warning">${item.error}</p>
             <div class="pdf-queue-actions">
               <button type="button" class="btn-secondary" data-pdfq-discard="${item.uid}">🗑️ تجاهل</button>
             </div>
@@ -2316,7 +2334,6 @@
     const statusEl = document.getElementById('inbodyPdfStatus');
 
     if (!sampleCap) { statusEl.textContent = '⚠️ المساعد الذكي غير متاح في هذا العرض، أدخلي القيم يدويًا.'; return; }
-    if (typeof pdfjsLib === 'undefined') { statusEl.textContent = '⚠️ تعذّر تحميل أداة قراءة PDF، أدخلي القيم يدويًا.'; return; }
 
     const limits = await sampleCap.limits().catch(() => null);
     if (!limits || !limits.images) {
@@ -2331,8 +2348,7 @@
       const uid = `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`;
       let entry;
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        const blobs = await renderPdfPagesToPngBlobs(arrayBuffer, maxPages);
+        const blobs = await fileToImageBlobs(file, maxPages, limits);
         if (blobs.length === 0) throw { code: 'render_failed' };
 
         const data = await sampleCap.json(INBODY_EXTRACT_PROMPT, { images: blobs, modelTier: 'default' });
@@ -2344,10 +2360,12 @@
         const date = (data && data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) ? data.date : null;
         entry = { uid, fileName: file.name, date, values, error: null };
       } catch (err) {
-        console.error('Inbody PDF extraction failed for', file.name, err);
-        const msg = (err && err.code === 'render_failed')
-          ? 'تعذّر تحويل الملف إلى صورة، تأكّدي أنه ملف PDF سليم.'
-          : (assistantErrorMessage(err) || 'تعذّر استخراج الأرقام من هذا الملف.');
+        console.error('Inbody image/PDF extraction failed for', file.name, err);
+        let msg;
+        if (err && err.code === 'render_failed') msg = '⚠️ تعذّر تحويل الملف إلى صورة، تأكّدي أنه ملف PDF سليم.';
+        else if (err && err.code === 'pdfjs_unavailable') msg = '⚠️ تعذّر تحميل أداة قراءة PDF لهذا الملف، جرّبي رفعه كصورة بدلًا من PDF.';
+        else if (err && err.code === 'image_rejected') msg = `⚠️ ${err.message} — جرّبي حفظها كـ JPEG أو PNG ثم رفعها.`;
+        else msg = assistantErrorMessage(err) || '⚠️ تعذّر استخراج الأرقام من هذا الملف.';
         entry = { uid, fileName: file.name, error: msg };
       }
       syncPdfQueueDomToState(); // keep edits made to already-shown cards while this file was processing
