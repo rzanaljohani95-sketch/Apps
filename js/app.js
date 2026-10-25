@@ -1381,9 +1381,17 @@
 
     // Every point's own date, not a sampled subset — a labeled dot with no
     // date under it is exactly the ambiguity this is meant to avoid.
+    // Always center-anchored with the position clamped by an estimated text
+    // width: mixing Arabic text with digits makes SVG's start/end anchors
+    // unreliable (bidi can anchor from the "wrong" visual side), which was
+    // pushing edge labels outside the chart — a clamped center is direction-
+    // neutral and can never overflow regardless of how the glyphs reorder.
+    const estCharW = 6.2;
     const xLabels = values.map((v, i) => {
-      const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
-      return `<text x="${xFor(i).toFixed(1)}" y="${(height - 6).toFixed(1)}" text-anchor="${anchor}" class="chart-x-label">${formatDateAr(points[i].date)}</text>`;
+      const text = formatDateAr(points[i].date);
+      const textW = text.length * estCharW;
+      const cx = Math.max(textW / 2 + 2, Math.min(width - textW / 2 - 2, xFor(i)));
+      return `<text x="${cx.toFixed(1)}" y="${(height - 6).toFixed(1)}" text-anchor="middle" class="chart-x-label">${text}</text>`;
     }).join('');
 
     // Every point's value is labeled directly — she wants them all visible
