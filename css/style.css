@@ -294,22 +294,47 @@ input:focus, textarea:focus, select:focus {
 .segmental-snapshot { display: flex; flex-direction: column; gap: 18px; margin-bottom: 14px; }
 .segment-group-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 10px; color: var(--ink); }
 
-.body-diagram-row { display: flex; align-items: center; gap: 16px; }
-@media (max-width: 420px) { .body-diagram-row { flex-wrap: wrap; justify-content: center; } }
-.body-labels { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 10px; }
-.body-label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 0.85rem; }
-.body-label-region { font-weight: 600; color: var(--ink); white-space: nowrap; }
-.body-label-value { font-weight: 700; white-space: nowrap; }
-.body-label-value.good { color: var(--accent-dark); }
-.body-label-value.bad { color: var(--warn); }
-.body-label-value.flat { color: var(--muted); }
-.body-diagram-svg { width: 130px; height: auto; flex: 0 0 auto; }
-.body-side-label { font-size: 15px; font-weight: 700; fill: var(--muted); }
-.body-zone-neutral { fill: var(--surface-2); }
-.body-zone-none rect { fill: var(--surface-2); }
-.body-zone-flat rect { fill: var(--muted); opacity: 0.55; }
-.body-zone-good rect { fill: var(--accent); opacity: 0.8; }
-.body-zone-bad rect { fill: var(--warn); opacity: 0.8; }
+/* Plain silhouette with floating value/status labels around it, like a real
+   InBody segmental printout — arms label the top corners, trunk centers over
+   the waist, legs label the bottom corners. "يمين" (right) is the screen's
+   right side, matching how the real report shows it (not mirrored). */
+.body-diagram-figure {
+  position: relative;
+  width: 150px;
+  margin: 10px auto 34px;
+}
+.body-diagram-svg { width: 100%; height: auto; display: block; }
+.body-shape { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.5; }
+
+.bd-label {
+  position: absolute;
+  width: 66px;
+  text-align: center;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+.bd-value { font-weight: 700; font-size: 0.8rem; color: var(--ink); }
+.bd-status { font-weight: 600; }
+.bd-label.good .bd-value, .bd-label.good .bd-status { color: var(--accent-dark); }
+.bd-label.bad .bd-value, .bd-label.bad .bd-status { color: var(--warn); }
+.bd-label.flat .bd-value, .bd-label.flat .bd-status,
+.bd-label.none .bd-value { color: var(--muted); }
+
+.bd-pos-right-arm { top: 2%; right: -62px; }
+.bd-pos-left-arm { top: 2%; left: -62px; }
+.bd-pos-trunk { top: 36%; left: 50%; transform: translateX(-50%); }
+.bd-pos-right-leg { top: 66%; right: -62px; }
+.bd-pos-left-leg { top: 66%; left: -62px; }
+
+.bd-side-label {
+  position: absolute;
+  bottom: -26px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.bd-side-label.bd-side-right { right: 6px; }
+.bd-side-label.bd-side-left { left: 6px; }
 
 /* ---------- field-pill selector + big single-field chart ---------- */
 .field-pills {

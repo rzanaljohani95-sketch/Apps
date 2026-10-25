@@ -1687,38 +1687,23 @@
     return { latest, cls: improved ? 'good' : 'bad', text: improved ? 'تحسّن' : 'تراجع' };
   }
 
-  // A simplified body silhouette split into InBody's own five segments
-  // (right/left arm, trunk, right/left leg), each an independently-colorable
-  // <g>. Drawn as if the figure faces the viewer (the standard medical/
-  // InBody-report convention), so the PERSON's right arm/leg is the shape on
-  // the screen's left — "يمين"/"يسار" labels on the diagram make this
-  // explicit rather than relying on position alone. Same capsule proportions
-  // as the body illustration in the measurement guide.
-  function bodyZoneSvg(zones) {
-    return `<svg viewBox="0 0 240 380" class="body-diagram-svg" role="img" aria-label="رسم توضيحي لتوزيع الجسم مع تمييز الجانب الأيمن والأيسر">
-      <ellipse cx="120" cy="28" rx="17" ry="19" class="body-zone-neutral"/>
-      <rect x="112" y="45" width="16" height="14" rx="4" class="body-zone-neutral"/>
-      <g class="body-zone-${zones.trunk}">
-        <rect x="68" y="58" width="104" height="54" rx="26"/>
-        <rect x="87" y="103" width="66" height="32" rx="16"/>
-        <rect x="74" y="126" width="92" height="42" rx="21"/>
-      </g>
-      <g class="body-zone-${zones.rightArm}">
-        <rect x="38" y="64" width="27" height="116" rx="13.5"/>
-      </g>
-      <g class="body-zone-${zones.leftArm}">
-        <rect x="175" y="64" width="27" height="116" rx="13.5"/>
-      </g>
-      <g class="body-zone-${zones.rightLeg}">
-        <rect x="78" y="165" width="35" height="90" rx="17"/>
-        <rect x="82" y="252" width="27" height="90" rx="13.5"/>
-      </g>
-      <g class="body-zone-${zones.leftLeg}">
-        <rect x="127" y="165" width="35" height="90" rx="17"/>
-        <rect x="131" y="252" width="27" height="90" rx="13.5"/>
-      </g>
-      <text x="22" y="56" class="body-side-label" text-anchor="middle">يمين</text>
-      <text x="218" y="56" class="body-side-label" text-anchor="middle">يسار</text>
+  // A plain (uncolored) body silhouette — matches the flat grey figure on a
+  // real InBody segmental printout. Status now lives in the floating value
+  // labels placed around it (see buildGroup below), not in the shape's fill.
+  // Same capsule proportions as the body illustration in the measurement guide.
+  function bodyZoneSvg() {
+    return `<svg viewBox="0 0 240 380" class="body-diagram-svg" role="img" aria-label="رسم توضيحي لشكل الجسم">
+      <ellipse cx="120" cy="28" rx="17" ry="19" class="body-shape"/>
+      <rect x="112" y="45" width="16" height="14" rx="4" class="body-shape"/>
+      <rect x="68" y="58" width="104" height="54" rx="26" class="body-shape"/>
+      <rect x="87" y="103" width="66" height="32" rx="16" class="body-shape"/>
+      <rect x="74" y="126" width="92" height="42" rx="21" class="body-shape"/>
+      <rect x="38" y="64" width="27" height="116" rx="13.5" class="body-shape"/>
+      <rect x="175" y="64" width="27" height="116" rx="13.5" class="body-shape"/>
+      <rect x="78" y="165" width="35" height="90" rx="17" class="body-shape"/>
+      <rect x="127" y="165" width="35" height="90" rx="17" class="body-shape"/>
+      <rect x="82" y="252" width="27" height="90" rx="13.5" class="body-shape"/>
+      <rect x="131" y="252" width="27" height="90" rx="13.5" class="body-shape"/>
     </svg>`;
   }
 
@@ -1745,26 +1730,36 @@
     const latestDate = [...sorted].reverse()
       .find(r => SEGMENTAL_FIELDS.some(f => r[f.key] !== null && r[f.key] !== undefined)).date;
 
+    // Position class per region, matching a real InBody printout's layout:
+    // arms label the top corners, trunk sits centered over the waist, legs
+    // label the bottom corners — and "right" (يمين) is the screen's RIGHT
+    // side here (as her own report shows it), not mirrored.
+    const REGION_POSITION = {
+      rightArm: 'right-arm', leftArm: 'left-arm', trunk: 'trunk',
+      rightLeg: 'right-leg', leftLeg: 'left-leg',
+    };
+
     const buildGroup = (metric, title) => {
-      const regions = SEGMENTAL_REGIONS.map(r => r.key);
-      const zoneCls = {};
-      const labelRows = regions.map(region => {
-        const f = SEGMENTAL_FIELDS.find(x => x.region === region && x.metric === metric);
-        const pts = sorted.filter(r => r[f.key] !== null && r[f.key] !== undefined);
+      const labels = SEGMENTAL_REGIONS.map(r => {
+        const f = SEGMENTAL_FIELDS.find(x => x.region === r.key && x.metric === metric);
+        const pts = sorted.filter(row => row[f.key] !== null && row[f.key] !== undefined);
         const trend = segmentTrend(f, pts);
-        if (!trend) {
-          zoneCls[region] = 'none';
-          return `<div class="body-label-row"><span class="body-label-region">${f.regionLabel}</span><span class="muted">لا يوجد</span></div>`;
-        }
-        zoneCls[region] = trend.cls;
-        return `<div class="body-label-row"><span class="body-label-region">${f.regionLabel}</span><span class="body-label-value ${trend.cls}">${trend.latest}% — ${trend.text}</span></div>`;
-      });
+        const posCls = `bd-pos-${REGION_POSITION[r.key]}`;
+        if (!trend) return `<div class="bd-label ${posCls} none"><div class="bd-value">—</div></div>`;
+        return `<div class="bd-label ${posCls} ${trend.cls}">
+          <div class="bd-value">${trend.latest}%</div>
+          <div class="bd-status">${trend.text}</div>
+        </div>`;
+      }).join('');
+
       return `
         <div class="segment-group">
           <div class="segment-group-title">${title} — آخر قراءة (${formatDateAr(latestDate)})</div>
-          <div class="body-diagram-row">
-            <div class="body-labels">${labelRows.join('')}</div>
-            ${bodyZoneSvg(zoneCls)}
+          <div class="body-diagram-figure">
+            ${labels}
+            ${bodyZoneSvg()}
+            <div class="bd-side-label bd-side-right">يمين</div>
+            <div class="bd-side-label bd-side-left">يسار</div>
           </div>
         </div>
       `;
