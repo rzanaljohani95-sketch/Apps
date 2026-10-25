@@ -1636,7 +1636,7 @@
   /* ============================ AI ASSISTANT ============================ */
 
   let sampleCap = null;
-  const TIPS_BUTTON_IDS = ['tipsTodayBtn', 'tipsMeasureBtn', 'tipsHistoryBtn'];
+  const TIPS_BUTTON_IDS = ['tipsTodayBtn', 'tipsMeasureBtn', 'tipsHistoryBtn', 'qaBtnToday', 'qaBtnMeasure', 'qaBtnHistory'];
 
   const ASSISTANT_RULES =
     'أنت مساعد صحي ولياقة بدنية شخصي داخل تطبيق متابعة يستخدمه شخص واحد. ' +
@@ -1735,21 +1735,27 @@
     {
       btnId: 'tipsTodayBtn',
       outId: 'tipsTodayOutput',
+      qaInputId: 'qaInputToday',
+      qaBtnId: 'qaBtnToday',
       focus: 'ركّزي في نصيحتك على: مدى انتظام تسجيله اليومي، واتساق التمرين والسعرات والبروتين مقابل الهدف خلال آخر الأيام المسجّلة. رتّبي نصيحة التمرين نفسها حسب مرحلة الدورة الحالية إن وُجدت currentCyclePhase: بالمرحلة الشهرية اقترحي تمارين أخف (مشي، إطالات) وخففي التوقعات، بالجريبية والإباضة اقترحي زيادة الشدة أو الأحمال تدريجيًا، وبالأصفرية اقترحي شدة متوسطة مع مراعاة التعب المحتمل قرب نهايتها.',
     },
     {
       btnId: 'tipsMeasureBtn',
       outId: 'tipsMeasureOutput',
+      qaInputId: 'qaInputMeasure',
+      qaBtnId: 'qaBtnMeasure',
       focus: 'ركّزي في نصيحتك على: اتجاه التغيّر في قياسات الجسم عبر الوقت (تحسّن أو تراجع) مقارنة بهدف كل قياس، وأي قياس يستحق انتباهًا أكبر. إذا توفّرت currentCyclePhase، اربطي بها عند تفسير القياسات: مثلًا ارتفاع طفيف بالوزن أو محيط الخصر/أسفل البطن/الأرداف بالمرحلة الأصفرية أو قرب الدورة قد يكون احتباس ماء مؤقت وليس تراجعًا حقيقيًا، وقد يكون وقت القياس بعد انتهاء الدورة أدق لمتابعة الاتجاه الفعلي.',
     },
     {
       btnId: 'tipsHistoryBtn',
       outId: 'tipsHistoryOutput',
+      qaInputId: 'qaInputHistory',
+      qaBtnId: 'qaBtnHistory',
       focus: 'لخّصي أداءه العام على المدى الأطول: الانتظام بالتسجيل، ونمط الالتزام بالتمرين والسعرات والبروتين عبر الأسابيع، وأي اتجاه عام يستحق الانتباه.',
     },
   ];
 
-  TIPS_SECTIONS.forEach(({ btnId, outId, focus }) => {
+  TIPS_SECTIONS.forEach(({ btnId, outId, qaInputId, qaBtnId, focus }) => {
     const btn = document.getElementById(btnId);
     const out = document.getElementById(outId);
     if (!btn || !out) return;
@@ -1774,6 +1780,38 @@
       } finally {
         btn.disabled = !sampleCap;
       }
+    });
+
+    const qaInput = document.getElementById(qaInputId);
+    const qaBtn = document.getElementById(qaBtnId);
+    if (!qaInput || !qaBtn) return;
+    const askQuestion = async () => {
+      const question = qaInput.value.trim();
+      if (!question) { showToast('اكتبي سؤالك أولًا.'); return; }
+      if (!sampleCap) { showToast('المساعد الذكي غير متاح في هذا العرض.'); return; }
+      qaBtn.disabled = true;
+      out.innerHTML = '<span class="thinking">🤔 يفكر...</span>';
+      try {
+        const context = buildAssistantContext();
+        const prompt =
+          ASSISTANT_RULES +
+          '\n\nأجيبي على سؤال المستخدم التالي اعتمادًا على بياناته أدناه فقط. إن كان السؤال خارج نطاق بيانات اللياقة/الصحة هنا، وضّحي ذلك بأدب.' +
+          '\n\nسؤال المستخدم: ' + question +
+          '\n\nبيانات المستخدم:\n' + JSON.stringify(context);
+        const { text } = await sampleCap(prompt, {
+          modelTier: 'default',
+          onText: ({ text }) => { out.textContent = text; },
+        });
+        out.textContent = text;
+      } catch (err) {
+        out.textContent = assistantErrorMessage(err);
+      } finally {
+        qaBtn.disabled = !sampleCap;
+      }
+    };
+    qaBtn.addEventListener('click', askQuestion);
+    qaInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') askQuestion();
     });
   });
 

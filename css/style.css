@@ -678,6 +678,19 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 .assistant-output:empty { margin-top: 0; }
 .assistant-output .thinking { color: var(--muted); }
 
+.assistant-qa {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.assistant-qa input {
+  flex: 1;
+  min-width: 0;
+}
+.assistant-qa button {
+  flex-shrink: 0;
+}
+
 .toast {
   position: fixed;
   bottom: 24px;
