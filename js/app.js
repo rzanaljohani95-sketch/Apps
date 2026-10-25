@@ -1311,14 +1311,12 @@
     const latest = sorted[sorted.length - 1];
     const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
 
-    el.innerHTML = MEASURE_FIELDS.map(f => {
+    const bullets = MEASURE_FIELDS.map(f => {
       const cur = latest[f.key];
       const prior = prev ? prev[f.key] : null;
-      if (cur === null || cur === undefined) {
-        return `<div class="delta-card"><div class="delta-name">${f.label}</div><div class="delta-value muted">لا يوجد</div></div>`;
-      }
+      if (cur === null || cur === undefined) return '';
       if (prior === null || prior === undefined) {
-        return `<div class="delta-card"><div class="delta-name">${f.label}</div><div class="delta-value">${cur} ${f.unit}</div></div>`;
+        return `<li class="delta-bullet"><span class="delta-bullet-name">${f.label}:</span> <span class="delta-bullet-value">${cur} ${f.unit}</span> <span class="muted">(أول قياس)</span></li>`;
       }
       const diff = round1(cur - prior);
       let cls = 'delta-flat';
@@ -1334,12 +1332,16 @@
         goalCls = improved ? 'delta-good' : 'delta-bad';
       }
 
-      return `<div class="delta-card">
-        <div class="delta-name">${f.label}</div>
-        <div class="delta-value">${cur} ${f.unit}</div>
-        <div class="delta-value ${goalCls || cls}">${arrow} ${diff > 0 ? '+' : ''}${diff}</div>
-      </div>`;
-    }).join('');
+      return `<li class="delta-bullet">
+        <span class="delta-bullet-name">${f.label}:</span>
+        <span class="delta-bullet-value">${cur} ${f.unit}</span>
+        <span class="delta-bullet-change ${goalCls || cls}">${arrow} ${diff > 0 ? '+' : ''}${diff}</span>
+      </li>`;
+    }).filter(Boolean);
+
+    el.innerHTML = bullets.length
+      ? `<ul class="delta-bullet-list">${bullets.join('')}</ul>`
+      : `<p class="muted">لا توجد بيانات كافية لعرض الملخص.</p>`;
   }
 
   /* ---------- measurements overview (all fields at a glance) ---------- */
@@ -1646,14 +1648,12 @@
     const latest = sorted[sorted.length - 1];
     const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
 
-    el.innerHTML = INBODY_FIELDS.map(f => {
+    const bullets = INBODY_FIELDS.map(f => {
       const cur = latest[f.key];
       const prior = prev ? prev[f.key] : null;
-      if (cur === null || cur === undefined) {
-        return `<div class="delta-card"><div class="delta-name">${f.label}</div><div class="delta-value muted">لا يوجد</div></div>`;
-      }
+      if (cur === null || cur === undefined) return '';
       if (prior === null || prior === undefined) {
-        return `<div class="delta-card"><div class="delta-name">${f.label}</div><div class="delta-value">${cur} ${f.unit}</div></div>`;
+        return `<li class="delta-bullet"><span class="delta-bullet-name">${f.label}:</span> <span class="delta-bullet-value">${cur} ${f.unit}</span> <span class="muted">(أول قراءة)</span></li>`;
       }
       const diff = round1(cur - prior);
       let cls = 'delta-flat';
@@ -1668,12 +1668,16 @@
         goalCls = improved ? 'delta-good' : 'delta-bad';
       }
 
-      return `<div class="delta-card">
-        <div class="delta-name">${f.label}</div>
-        <div class="delta-value">${cur} ${f.unit}</div>
-        <div class="delta-value ${goalCls || cls}">${arrow} ${diff > 0 ? '+' : ''}${diff}</div>
-      </div>`;
-    }).join('');
+      return `<li class="delta-bullet">
+        <span class="delta-bullet-name">${f.label}:</span>
+        <span class="delta-bullet-value">${cur} ${f.unit}</span>
+        <span class="delta-bullet-change ${goalCls || cls}">${arrow} ${diff > 0 ? '+' : ''}${diff}</span>
+      </li>`;
+    }).filter(Boolean);
+
+    el.innerHTML = bullets.length
+      ? `<ul class="delta-bullet-list">${bullets.join('')}</ul>`
+      : `<p class="muted">لا توجد بيانات كافية لعرض الملخص.</p>`;
   }
 
   function renderInbodyOverview() {

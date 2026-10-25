@@ -596,25 +596,23 @@ th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
 
 .mo-empty { font-size: 0.72rem; margin: 8px 0 0; }
 
-.delta-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+.delta-bullet-list {
+  margin: 0;
+  padding: 0 1.3em 0 0;
+  list-style: disc;
 }
-@media (max-width: 640px) { .delta-grid { grid-template-columns: 1fr 1fr; } }
-
-.delta-card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 8px;
-  text-align: right;
+.delta-bullet {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
 }
-.delta-card .delta-name { font-size: 0.76rem; color: var(--muted); }
-.delta-card .delta-value {
-  font-size: 1.05rem;
+.delta-bullet:last-child { border-bottom: none; }
+.delta-bullet-name { font-weight: 600; color: var(--ink); }
+.delta-bullet-value { font-variant-numeric: tabular-nums; }
+.delta-bullet-change {
   font-weight: 700;
-  margin-top: 4px;
   font-variant-numeric: tabular-nums;
+  margin-right: 4px;
 }
 .delta-flat { color: var(--muted); }
 .delta-good { color: var(--accent-dark); }
