@@ -1216,6 +1216,11 @@
         return;
       }
 
+      if (state.measurements.some(m => m.date === date)) {
+        showToast('⚠️ يوجد قياس مسجّل بالفعل لهذا التاريخ — لم يُحفظ لتجنّب التكرار. استخدمي ✏️ لتعديل القياس الموجود إذا تبغين تغييره.', 8000);
+        return;
+      }
+
       const entry = { id: `${date}-${Date.now()}`, date, ...values };
       const suspicious = findSuspiciousFields(entry);
       const proceed = () => {
@@ -1550,6 +1555,11 @@
         cancelEditInbody();
         renderAll();
         showToast('تم تحديث القراءة.');
+        return;
+      }
+
+      if (state.inbody.some(r => r.date === date)) {
+        showToast('⚠️ يوجد قراءة إنبودي مسجّلة بالفعل لهذا التاريخ — لم تُحفظ لتجنّب التكرار. استخدمي ✏️ لتعديل القراءة الموجودة إذا تبغين تغييرها.', 8000);
         return;
       }
 
@@ -2504,6 +2514,14 @@
       document.getElementById(`pdfq_${uid}_date`)?.focus();
       return;
     }
+    // A reading already on record for this exact date is almost certainly the
+    // same report re-uploaded — discard it rather than create a duplicate row.
+    if (state.inbody.some(r => r.date === item.date)) {
+      inbodyPdfQueue = inbodyPdfQueue.filter(q => q.uid !== uid);
+      renderInbodyPdfQueue();
+      showToast(`⚠️ يوجد قراءة مسجّلة بالفعل بتاريخ ${item.date} — تم تجاهل (${item.fileName}) كقراءة مكرّرة.`, 8000);
+      return;
+    }
     const entry = { id: `${item.date}-${Date.now()}-${item.uid}`, date: item.date, ...item.values };
     state.inbody.push(entry);
     state.inbody.sort((a, b) => a.date.localeCompare(b.date));
@@ -2522,15 +2540,34 @@
       showToast(missing ? '⚠️ كل القراءات المتبقية بحاجة لتاريخ القياس قبل الحفظ.' : 'لا توجد قراءات جاهزة للحفظ.');
       return;
     }
+    // Reject a date already on record, and reject a second file in this same
+    // batch claiming a date another file in the batch already took — either
+    // way it's a duplicate reading, discarded rather than saved twice.
+    const existingDates = new Set(state.inbody.map(r => r.date));
+    const seenInBatch = new Set();
+    const saved = [];
+    const duplicates = [];
     ready.forEach(item => {
+      if (existingDates.has(item.date) || seenInBatch.has(item.date)) {
+        duplicates.push(item);
+        return;
+      }
+      seenInBatch.add(item.date);
+      saved.push(item);
       state.inbody.push({ id: `${item.date}-${Date.now()}-${item.uid}`, date: item.date, ...item.values });
     });
-    state.inbody.sort((a, b) => a.date.localeCompare(b.date));
-    saveState();
-    inbodyPdfQueue = inbodyPdfQueue.filter(q => q.error || !q.date);
+    if (saved.length) {
+      state.inbody.sort((a, b) => a.date.localeCompare(b.date));
+      saveState();
+    }
+    const handledUids = new Set([...saved, ...duplicates].map(q => q.uid));
+    inbodyPdfQueue = inbodyPdfQueue.filter(q => q.error || !q.date || !handledUids.has(q.uid));
     renderInbodyPdfQueue();
-    renderAll();
-    showToast(`تم حفظ ${ready.length} قراءة.` + (missing ? ` وتبقّى ${missing} بحاجة لتاريخ.` : ''));
+    if (saved.length) renderAll();
+    let msg = saved.length ? `تم حفظ ${saved.length} قراءة.` : '';
+    if (duplicates.length) msg += ` تم تجاهل ${duplicates.length} كقراءات مكرّرة (تاريخ موجود مسبقًا).`;
+    if (missing) msg += ` وتبقّى ${missing} بحاجة لتاريخ.`;
+    showToast(msg.trim() || 'لا توجد قراءات جاهزة للحفظ.');
   }
 
   document.getElementById('inbodyPdfBtn').addEventListener('click', () => {
