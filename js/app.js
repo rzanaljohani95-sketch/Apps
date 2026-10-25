@@ -1379,11 +1379,9 @@
 
     const dots = values.map((v, i) => `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="5" class="chart-dot"/>`).join('');
 
-    const maxXLabels = 4;
-    const idxs = n <= maxXLabels
-      ? Array.from({ length: n }, (_, i) => i)
-      : [...new Set(Array.from({ length: maxXLabels }, (_, i) => Math.round(i * (n - 1) / (maxXLabels - 1))))];
-    const xLabels = idxs.map(i => {
+    // Every point's own date, not a sampled subset — a labeled dot with no
+    // date under it is exactly the ambiguity this is meant to avoid.
+    const xLabels = values.map((v, i) => {
       const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
       return `<text x="${xFor(i).toFixed(1)}" y="${(height - 6).toFixed(1)}" text-anchor="${anchor}" class="chart-x-label">${formatDateAr(points[i].date)}</text>`;
     }).join('');
