@@ -291,23 +291,70 @@ input:focus, textarea:focus, select:focus {
 }
 .pdf-queue-subhead { margin: 14px 0 6px; font-weight: 600; font-size: 0.85rem; }
 
-.segmental-snapshot { display: flex; flex-direction: column; gap: 14px; margin-bottom: 14px; }
-.segment-group-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 8px; color: var(--ink); }
-.segment-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-@media (max-width: 420px) { .segment-row { grid-template-columns: 1fr; } }
-.segment-tile {
-  background: var(--surface-2);
-  border-radius: 12px;
-  padding: 10px 12px;
-  text-align: center;
+.segmental-snapshot { display: flex; flex-direction: column; gap: 18px; margin-bottom: 14px; }
+.segment-group-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 10px; color: var(--ink); }
+
+.body-diagram-row { display: flex; align-items: center; gap: 16px; }
+@media (max-width: 420px) { .body-diagram-row { flex-wrap: wrap; justify-content: center; } }
+.body-labels { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 10px; }
+.body-label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 0.85rem; }
+.body-label-region { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.body-label-value { font-weight: 700; white-space: nowrap; }
+.body-label-value.good { color: var(--accent-dark); }
+.body-label-value.bad { color: var(--warn); }
+.body-label-value.flat { color: var(--muted); }
+.body-diagram-svg { width: 108px; height: auto; flex: 0 0 auto; }
+.body-zone-neutral { fill: var(--surface-2); }
+.body-zone-none rect { fill: var(--surface-2); }
+.body-zone-flat rect { fill: var(--muted); opacity: 0.55; }
+.body-zone-good rect { fill: var(--accent); opacity: 0.8; }
+.body-zone-bad rect { fill: var(--warn); opacity: 0.8; }
+
+/* ---------- field-pill selector + big single-field chart ---------- */
+.field-pills {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 14px;
+  scrollbar-width: thin;
 }
-.segment-region { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-.segment-value { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--ink); }
-.segment-status { font-size: 0.74rem; margin-top: 4px; font-weight: 600; }
-.segment-tile.good .segment-status { color: var(--accent-dark); }
-.segment-tile.bad .segment-status { color: var(--warn); }
-.segment-tile.good { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
-.segment-tile.bad { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 40%, transparent); }
+.field-pill {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.field-pill.active { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+
+.big-chart-wrap { width: 100%; }
+.big-chart-title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; margin-bottom: 8px; color: var(--ink); }
+.big-chart-canvas { width: 100%; }
+.big-chart-svg { display: block; overflow: visible; width: 100%; }
+.chart-grid-line { stroke: var(--border); stroke-width: 1; }
+.chart-axis-label { font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart-x-label { font-size: 10px; fill: var(--muted); }
+.chart-area { opacity: 0.12; }
+.chart-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chart-dot { stroke: var(--surface-2); stroke-width: 2; }
+.chart-badge-bg { fill: var(--ink); }
+.chart-badge-text { fill: var(--surface); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.chart-good .chart-line { stroke: var(--accent); }
+.chart-good .chart-dot { fill: var(--accent); }
+.chart-good .chart-area { fill: var(--accent); }
+.chart-bad .chart-line { stroke: var(--warn); }
+.chart-bad .chart-dot { fill: var(--warn); }
+.chart-bad .chart-area { fill: var(--warn); }
+.chart-flat .chart-line { stroke: var(--muted); }
+.chart-flat .chart-dot { fill: var(--muted); }
+.chart-flat .chart-area { fill: var(--muted); }
 .switch-label {
   display: flex;
   align-items: center;

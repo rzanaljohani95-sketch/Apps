@@ -30,11 +30,11 @@
 
   // InBody's segmental lean/fat analysis reports each body region as a
   // percentage of its own "normal" range (not an absolute mass) — e.g. 105%
-  // means 5% above the standard for that region, 100% is the midpoint. These
-  // stay separate from INBODY_FIELDS (which drives the plain measurement
-  // form/table) because "good" here depends on the metric (more muscle is
-  // good, more fat isn't) AND sits around a 100% midpoint rather than
-  // monotonically up or down, so they get their own distribution view.
+  // means 5% above the standard for that region. These stay separate from
+  // INBODY_FIELDS (which drives the plain measurement form/table) because
+  // they get their own body-shaped distribution view, colored by trend
+  // direction (fat down / muscle up is an improvement) rather than the
+  // plain up/down goal-direction table.
   const SEGMENTAL_REGIONS = [
     { key: 'upper', label: 'الجزء العلوي' },
     { key: 'trunk', label: 'الجذع' },
@@ -44,8 +44,6 @@
     ...SEGMENTAL_REGIONS.map(r => ({ key: `${r.key}FatPct`, region: r.key, regionLabel: r.label, metric: 'fat', metricLabel: 'الدهون', unit: '%' })),
     ...SEGMENTAL_REGIONS.map(r => ({ key: `${r.key}MusclePct`, region: r.key, regionLabel: r.label, metric: 'muscle', metricLabel: 'العضلات', unit: '%' })),
   ];
-  const SEGMENTAL_NORMAL_LOW = 90;
-  const SEGMENTAL_NORMAL_HIGH = 110;
   // All InBody-report fields the entry/edit form and PDF extraction handle.
   const INBODY_ALL_FIELDS = [...INBODY_FIELDS, ...SEGMENTAL_FIELDS];
 
@@ -1403,67 +1401,156 @@
     });
   }
 
+  /* ---------- big single-field chart (one field at a time, picked via pills) ---------- */
+
+  const BIG_CHART_HEIGHT = 240;
+
+  // Round a min/max span to clean, evenly-spaced axis ticks instead of the
+  // raw data range — "60 / 55 / 52" is noise, "60 / 56 / 52 / 48" reads.
+  function niceTicks(rawMin, rawMax, count) {
+    let min = rawMin, max = rawMax;
+    if (min === max) { min -= 1; max += 1; }
+    const range = max - min;
+    const rawStep = range / Math.max(1, count - 1);
+    const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const norm = rawStep / mag;
+    let step;
+    if (norm < 1.5) step = 1 * mag;
+    else if (norm < 3) step = 2 * mag;
+    else if (norm < 7) step = 5 * mag;
+    else step = 10 * mag;
+    const niceMin = Math.floor(min / step) * step;
+    const niceMax = Math.ceil(max / step) * step;
+    const ticks = [];
+    for (let v = niceMin; v <= niceMax + step * 0.5; v += step) {
+      ticks.push(Math.round(v * 1000) / 1000);
+    }
+    return ticks;
+  }
+
+  function fmtAxisNum(v) {
+    return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
+  }
+
+  function buildBigChartSvg(points, key, unit, width, height, statusCls) {
+    const values = points.map(p => p[key]);
+    const n = values.length;
+    const ticks = niceTicks(Math.min(...values), Math.max(...values), 5);
+    const niceMin = ticks[0], niceMax = ticks[ticks.length - 1];
+
+    const padTop = 34, padBottom = 26, padRight = 42, padLeft = 10;
+    const plotW = Math.max(1, width - padLeft - padRight);
+    const plotH = height - padTop - padBottom;
+    const xFor = i => padLeft + (n > 1 ? i * (plotW / (n - 1)) : plotW / 2);
+    const yFor = v => padTop + plotH - ((v - niceMin) / (niceMax - niceMin)) * plotH;
+
+    const linePath = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`).join(' ');
+    const baseY = (padTop + plotH).toFixed(1);
+    const areaPath = `${linePath} L${xFor(n - 1).toFixed(1)},${baseY} L${xFor(0).toFixed(1)},${baseY} Z`;
+
+    const gridLines = ticks.map(t => `
+      <line x1="${padLeft}" y1="${yFor(t).toFixed(1)}" x2="${(width - padRight).toFixed(1)}" y2="${yFor(t).toFixed(1)}" class="chart-grid-line"/>
+      <text x="${(width - padRight + 6).toFixed(1)}" y="${yFor(t).toFixed(1)}" dy="0.32em" text-anchor="start" class="chart-axis-label">${fmtAxisNum(t)}</text>
+    `).join('');
+
+    const dots = values.map((v, i) => `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="5" class="chart-dot"/>`).join('');
+
+    const maxXLabels = 4;
+    const idxs = n <= maxXLabels
+      ? Array.from({ length: n }, (_, i) => i)
+      : [...new Set(Array.from({ length: maxXLabels }, (_, i) => Math.round(i * (n - 1) / (maxXLabels - 1))))];
+    const xLabels = idxs.map(i => {
+      const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
+      return `<text x="${xFor(i).toFixed(1)}" y="${(height - 6).toFixed(1)}" text-anchor="${anchor}" class="chart-x-label">${formatDateAr(points[i].date)}</text>`;
+    }).join('');
+
+    const badge = i => {
+      const vDisp = Math.round(values[i] * 10) / 10;
+      const text = `${vDisp}${unit ? ' ' + unit : ''}`;
+      const w = Math.max(34, text.length * 7 + 16);
+      const h = 22;
+      const cx = xFor(i), cy = yFor(values[i]);
+      const bx = Math.max(2, Math.min(width - w - 2, cx - w / 2));
+      const by = Math.max(2, cy - h - 10);
+      return `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${w}" height="${h}" rx="11" class="chart-badge-bg"/>
+        <text x="${(bx + w / 2).toFixed(1)}" y="${(by + h / 2).toFixed(1)}" dy="0.32em" text-anchor="middle" class="chart-badge-text">${text}</text>`;
+    };
+    const badges = n >= 2 ? badge(0) + badge(n - 1) : badge(0);
+
+    return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="big-chart-svg chart-${statusCls}">
+      ${gridLines}
+      <path d="${areaPath}" class="chart-area"/>
+      <path d="${linePath}" class="chart-line"/>
+      ${dots}
+      ${xLabels}
+      ${badges}
+    </svg>`;
+  }
+
+  function renderBigFieldChart(containerEl, field, points, goalDirection) {
+    if (points.length === 0) {
+      containerEl.innerHTML = `<p class="muted mo-empty">لا توجد بيانات لهذا الحقل بعد</p>`;
+      return;
+    }
+    const values = points.map(p => p[field.key]);
+    const diff = round1(values[values.length - 1] - values[0]);
+    let statusCls = 'flat';
+    if (diff !== 0 && goalDirection) {
+      const improved = (goalDirection === 'down' && diff < 0) || (goalDirection === 'up' && diff > 0);
+      statusCls = improved ? 'good' : 'bad';
+    }
+
+    containerEl.innerHTML = `
+      <div class="big-chart-title">${field.label}</div>
+      <div class="big-chart-canvas"></div>
+      ${points.length < 2 ? '<p class="muted mo-empty">قياس واحد فقط لحد الآن — سجّلي قياسًا آخر ليظهر الرسم البياني.</p>' : ''}
+    `;
+    if (points.length < 2) return;
+    const canvas = containerEl.querySelector('.big-chart-canvas');
+    const width = canvas.clientWidth || 320;
+    canvas.innerHTML = buildBigChartSvg(points, field.key, field.unit, width, BIG_CHART_HEIGHT, statusCls);
+  }
+
+  let selectedMeasureField = null;
+
   function renderMeasureOverview() {
-    const el = document.getElementById('measureOverviewGrid');
+    const pillsEl = document.getElementById('measureFieldPills');
+    const chartEl = document.getElementById('measureBigChart');
     const emptyMsg = document.getElementById('chartEmptyMsg');
     if (state.measurements.length === 0) {
-      el.innerHTML = '';
+      pillsEl.innerHTML = '';
+      chartEl.innerHTML = '';
+      emptyMsg.classList.remove('hidden');
+      return;
+    }
+
+    const sorted = [...state.measurements].sort((a, b) => a.date.localeCompare(b.date));
+    const fieldsWithData = MEASURE_FIELDS.filter(f => sorted.some(m => m[f.key] !== null && m[f.key] !== undefined));
+    if (fieldsWithData.length === 0) {
+      pillsEl.innerHTML = '';
+      chartEl.innerHTML = '';
       emptyMsg.classList.remove('hidden');
       return;
     }
     emptyMsg.classList.add('hidden');
 
-    const sorted = [...state.measurements].sort((a, b) => a.date.localeCompare(b.date));
-    const sparkSource = {};
+    if (!selectedMeasureField || !fieldsWithData.some(f => f.key === selectedMeasureField)) {
+      selectedMeasureField = fieldsWithData[0].key;
+    }
 
-    el.innerHTML = MEASURE_FIELDS.map(f => {
-      const points = sorted.filter(m => m[f.key] !== null && m[f.key] !== undefined);
-      if (points.length === 0) {
-        return `
-          <div class="mo-card">
-            <div class="mo-header"><span class="mo-label">${f.label}</span></div>
-            <p class="muted mo-empty">لا يوجد قياس بعد</p>
-          </div>
-        `;
-      }
+    pillsEl.innerHTML = fieldsWithData.map(f => `
+      <button type="button" class="field-pill ${f.key === selectedMeasureField ? 'active' : ''}" data-field-pill="${f.key}">${f.label}</button>
+    `).join('');
+    pillsEl.querySelectorAll('[data-field-pill]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedMeasureField = btn.dataset.fieldPill;
+        renderMeasureOverview();
+      });
+    });
 
-      const values = points.map(p => p[f.key]);
-      const latest = values[values.length - 1];
-      const first = values[0];
-      const diff = round1(latest - first);
-      const goal = state.settings.goalDirections[f.key];
-      let deltaCls = 'flat';
-      if (diff !== 0 && goal) {
-        const improved = (goal === 'down' && diff < 0) || (goal === 'up' && diff > 0);
-        deltaCls = improved ? 'good' : 'bad';
-      }
-      const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '→';
-
-      let sparkline;
-      if (points.length >= 2) {
-        sparkSource[f.key] = { values, deltaCls };
-        sparkline = `<div class="mo-spark-wrap" data-spark-key="${f.key}"></div>`;
-      } else {
-        sparkline = `<p class="muted mo-empty">قياس واحد فقط لحد الآن</p>`;
-      }
-
-      const deltaLine = points.length >= 2
-        ? `<div class="mo-delta ${deltaCls}">${arrow} ${diff > 0 ? '+' : ''}${diff} ${f.unit} منذ أول قياس</div>`
-        : '';
-
-      return `
-        <div class="mo-card">
-          <div class="mo-header">
-            <span class="mo-label">${f.label}</span>
-            <span class="mo-latest">${latest} ${f.unit}</span>
-          </div>
-          ${sparkline}
-          ${deltaLine}
-        </div>
-      `;
-    }).join('');
-
-    renderSparklineCharts(el, sparkSource);
+    const field = fieldsWithData.find(f => f.key === selectedMeasureField);
+    const points = sorted.filter(m => m[field.key] !== null && m[field.key] !== undefined);
+    renderBigFieldChart(chartEl, field, points, state.settings.goalDirections[field.key]);
   }
 
   /* ============================ INBODY FORM ============================ */
@@ -1680,101 +1767,89 @@
       : `<p class="muted">لا توجد بيانات كافية لعرض الملخص.</p>`;
   }
 
+  let selectedInbodyField = null;
+
   function renderInbodyOverview() {
-    const el = document.getElementById('inbodyOverviewGrid');
+    const pillsEl = document.getElementById('inbodyFieldPills');
+    const chartEl = document.getElementById('inbodyBigChart');
     const emptyMsg = document.getElementById('inbodyChartEmptyMsg');
     if (state.inbody.length === 0) {
-      el.innerHTML = '';
+      pillsEl.innerHTML = '';
+      chartEl.innerHTML = '';
+      emptyMsg.classList.remove('hidden');
+      return;
+    }
+
+    const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
+    const fieldsWithData = INBODY_FIELDS.filter(f => sorted.some(r => r[f.key] !== null && r[f.key] !== undefined));
+    if (fieldsWithData.length === 0) {
+      pillsEl.innerHTML = '';
+      chartEl.innerHTML = '';
       emptyMsg.classList.remove('hidden');
       return;
     }
     emptyMsg.classList.add('hidden');
 
-    const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
-    const sparkSource = {};
+    if (!selectedInbodyField || !fieldsWithData.some(f => f.key === selectedInbodyField)) {
+      selectedInbodyField = fieldsWithData[0].key;
+    }
 
-    el.innerHTML = INBODY_FIELDS.map(f => {
-      const points = sorted.filter(r => r[f.key] !== null && r[f.key] !== undefined);
-      if (points.length === 0) {
-        return `
-          <div class="mo-card">
-            <div class="mo-header"><span class="mo-label">${f.label}</span></div>
-            <p class="muted mo-empty">لا توجد قراءة بعد</p>
-          </div>
-        `;
-      }
+    pillsEl.innerHTML = fieldsWithData.map(f => `
+      <button type="button" class="field-pill ${f.key === selectedInbodyField ? 'active' : ''}" data-field-pill="${f.key}">${f.label}</button>
+    `).join('');
+    pillsEl.querySelectorAll('[data-field-pill]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedInbodyField = btn.dataset.fieldPill;
+        renderInbodyOverview();
+      });
+    });
 
-      const values = points.map(p => p[f.key]);
-      const latest = values[values.length - 1];
-      const first = values[0];
-      const diff = round1(latest - first);
-      const goal = state.settings.goalDirections[f.key];
-      let deltaCls = 'flat';
-      if (diff !== 0 && goal) {
-        const improved = (goal === 'down' && diff < 0) || (goal === 'up' && diff > 0);
-        deltaCls = improved ? 'good' : 'bad';
-      }
-      const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '→';
-
-      let sparkline;
-      if (points.length >= 2) {
-        sparkSource[f.key] = { values, deltaCls };
-        sparkline = `<div class="mo-spark-wrap" data-spark-key="${f.key}"></div>`;
-      } else {
-        sparkline = `<p class="muted mo-empty">قراءة واحدة فقط لحد الآن</p>`;
-      }
-
-      const deltaLine = points.length >= 2
-        ? `<div class="mo-delta ${deltaCls}">${arrow} ${diff > 0 ? '+' : ''}${diff} ${f.unit} منذ أول قراءة</div>`
-        : '';
-
-      return `
-        <div class="mo-card">
-          <div class="mo-header">
-            <span class="mo-label">${f.label}</span>
-            <span class="mo-latest">${latest} ${f.unit}</span>
-          </div>
-          ${sparkline}
-          ${deltaLine}
-        </div>
-      `;
-    }).join('');
-
-    renderSparklineCharts(el, sparkSource);
+    const field = fieldsWithData.find(f => f.key === selectedInbodyField);
+    const points = sorted.filter(r => r[field.key] !== null && r[field.key] !== undefined);
+    renderBigFieldChart(chartEl, field, points, state.settings.goalDirections[field.key]);
   }
 
   /* ---------- segmental fat/muscle distribution (upper/trunk/lower) ---------- */
 
-  // Each region is reported as a % of its own "normal" range, not an
-  // absolute amount — ~100% is the midpoint, so status is a band around it
-  // rather than a monotonic better-is-higher/lower comparison. "Good" also
-  // flips by metric: more muscle than normal is good, more fat isn't.
-  function segmentStatus(metric, value) {
-    if (value === null || value === undefined) return null;
-    const isHigh = value > SEGMENTAL_NORMAL_HIGH;
-    const isLow = value < SEGMENTAL_NORMAL_LOW;
-    if (metric === 'fat') {
-      if (isHigh) return { cls: 'bad', text: 'أعلى من المعدل' };
-      if (isLow) return { cls: 'good', text: 'أقل من المعدل' };
-      return { cls: 'good', text: 'طبيعي' };
-    }
-    if (isLow) return { cls: 'bad', text: 'أقل من المعدل' };
-    if (isHigh) return { cls: 'good', text: 'أعلى من المعدل' };
-    return { cls: 'good', text: 'طبيعي' };
+  // Direction, not absolute level, is what matters here — same convention as
+  // every other goal-directed field in the app: fat going down is an
+  // improvement, muscle going up is, regardless of where either sits.
+  function segmentGoalDirection(metric) {
+    return metric === 'fat' ? 'down' : 'up';
   }
 
-  function segmentTileHtml(f, value) {
-    if (value === null || value === undefined) {
-      return `<div class="segment-tile"><div class="segment-region">${f.regionLabel}</div><div class="segment-value muted">لا يوجد</div></div>`;
-    }
-    const status = segmentStatus(f.metric, value);
-    return `
-      <div class="segment-tile ${status.cls}">
-        <div class="segment-region">${f.regionLabel}</div>
-        <div class="segment-value">${value}%</div>
-        <div class="segment-status">${status.text}</div>
-      </div>
-    `;
+  // pointsForField: this field's own entries only, ascending by date.
+  function segmentTrend(f, pointsForField) {
+    if (pointsForField.length === 0) return null;
+    const latest = pointsForField[pointsForField.length - 1][f.key];
+    if (pointsForField.length < 2) return { latest, cls: 'none', text: 'أول قراءة' };
+    const prior = pointsForField[pointsForField.length - 2][f.key];
+    const diff = round1(latest - prior);
+    if (diff === 0) return { latest, cls: 'flat', text: 'بدون تغيير' };
+    const improved = (segmentGoalDirection(f.metric) === 'down' && diff < 0) ||
+                      (segmentGoalDirection(f.metric) === 'up' && diff > 0);
+    return { latest, cls: improved ? 'good' : 'bad', text: improved ? 'تحسّن' : 'تراجع' };
+  }
+
+  // A simplified body silhouette split into exactly the three zones we track
+  // (upper/trunk/lower), each one an independently-colorable <g>.
+  function bodyZoneSvg(zones) {
+    return `<svg viewBox="0 0 160 260" class="body-diagram-svg" role="img" aria-label="رسم توضيحي لتوزيع الجسم">
+      <circle cx="80" cy="22" r="16" class="body-zone-neutral"/>
+      <g class="body-zone-${zones.upper}">
+        <rect x="40" y="42" width="80" height="50" rx="20"/>
+        <rect x="18" y="46" width="20" height="90" rx="10"/>
+        <rect x="122" y="46" width="20" height="90" rx="10"/>
+      </g>
+      <g class="body-zone-${zones.trunk}">
+        <rect x="48" y="92" width="64" height="58" rx="18"/>
+      </g>
+      <g class="body-zone-${zones.lower}">
+        <rect x="44" y="148" width="72" height="37" rx="16"/>
+        <rect x="50" y="182" width="24" height="75" rx="12"/>
+        <rect x="86" y="182" width="24" height="75" rx="12"/>
+      </g>
+    </svg>`;
   }
 
   function renderSegmentalDistribution() {
@@ -1793,21 +1868,35 @@
     }
     emptyMsg.classList.add('hidden');
 
-    const latestWithData = [...sorted].reverse()
-      .find(r => SEGMENTAL_FIELDS.some(f => r[f.key] !== null && r[f.key] !== undefined));
-    const fatFields = SEGMENTAL_FIELDS.filter(f => f.metric === 'fat');
-    const muscleFields = SEGMENTAL_FIELDS.filter(f => f.metric === 'muscle');
+    const latestDate = [...sorted].reverse()
+      .find(r => SEGMENTAL_FIELDS.some(f => r[f.key] !== null && r[f.key] !== undefined)).date;
 
-    snapshotEl.innerHTML = `
-      <div class="segment-group">
-        <div class="segment-group-title">توزيع الدهون — آخر قراءة (${formatDateAr(latestWithData.date)})</div>
-        <div class="segment-row">${fatFields.map(f => segmentTileHtml(f, latestWithData[f.key])).join('')}</div>
-      </div>
-      <div class="segment-group">
-        <div class="segment-group-title">توزيع العضلات — آخر قراءة (${formatDateAr(latestWithData.date)})</div>
-        <div class="segment-row">${muscleFields.map(f => segmentTileHtml(f, latestWithData[f.key])).join('')}</div>
-      </div>
-    `;
+    const buildGroup = (metric, title) => {
+      const regions = ['upper', 'trunk', 'lower'];
+      const zoneCls = {};
+      const labelRows = regions.map(region => {
+        const f = SEGMENTAL_FIELDS.find(x => x.region === region && x.metric === metric);
+        const pts = sorted.filter(r => r[f.key] !== null && r[f.key] !== undefined);
+        const trend = segmentTrend(f, pts);
+        if (!trend) {
+          zoneCls[region] = 'none';
+          return `<div class="body-label-row"><span class="body-label-region">${f.regionLabel}</span><span class="muted">لا يوجد</span></div>`;
+        }
+        zoneCls[region] = trend.cls;
+        return `<div class="body-label-row"><span class="body-label-region">${f.regionLabel}</span><span class="body-label-value ${trend.cls}">${trend.latest}% — ${trend.text}</span></div>`;
+      });
+      return `
+        <div class="segment-group">
+          <div class="segment-group-title">${title} — آخر قراءة (${formatDateAr(latestDate)})</div>
+          <div class="body-diagram-row">
+            <div class="body-labels">${labelRows.join('')}</div>
+            ${bodyZoneSvg(zoneCls)}
+          </div>
+        </div>
+      `;
+    };
+
+    snapshotEl.innerHTML = buildGroup('fat', 'توزيع الدهون') + buildGroup('muscle', 'توزيع العضلات');
 
     const sparkSource = {};
     trendsEl.innerHTML = SEGMENTAL_FIELDS.map(f => {
@@ -1815,11 +1904,11 @@
       if (points.length === 0) return '';
       const values = points.map(p => p[f.key]);
       const latest = values[values.length - 1];
-      const status = segmentStatus(f.metric, latest);
+      const trend = segmentTrend(f, points);
 
       let sparkline;
       if (points.length >= 2) {
-        sparkSource[f.key] = { values, deltaCls: status.cls };
+        sparkSource[f.key] = { values, deltaCls: trend.cls };
         sparkline = `<div class="mo-spark-wrap" data-spark-key="${f.key}"></div>`;
       } else {
         sparkline = `<p class="muted mo-empty">قراءة واحدة فقط لحد الآن</p>`;
