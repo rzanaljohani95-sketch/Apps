@@ -20,6 +20,8 @@
   --cycle-period-dark: #c23a52;
   --cycle-period-light: #f0b3bc;
   --cycle-fertile: #4f9db5;
+  --fat-color: #c0392b;
+  --muscle-color: #4a7a3d;
   --radius: 18px;
   --font-display: 'Changa', Tahoma, sans-serif;
   --font-body: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
@@ -46,6 +48,8 @@
     --cycle-period-dark: #e8768c;
     --cycle-period-light: #a5626d;
     --cycle-fertile: #7ec3d6;
+    --fat-color: #e0776c;
+    --muscle-color: #8bb06f;
   }
 }
 
@@ -69,6 +73,8 @@
   --cycle-period-dark: #e8768c;
   --cycle-period-light: #a5626d;
   --cycle-fertile: #7ec3d6;
+  --fat-color: #e0776c;
+  --muscle-color: #8bb06f;
 }
 
 * { box-sizing: border-box; }
@@ -293,6 +299,8 @@ input:focus, textarea:focus, select:focus {
 
 .segmental-snapshot { display: flex; flex-direction: column; gap: 18px; margin-bottom: 14px; }
 .segment-group-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 10px; color: var(--ink); }
+.segment-group-title.fat { color: var(--fat-color); }
+.segment-group-title.muscle { color: var(--muscle-color); }
 
 /* Plain silhouette with floating value/status labels around it, like a real
    InBody segmental printout — arms label the top corners, trunk centers over
@@ -381,6 +389,12 @@ input:focus, textarea:focus, select:focus {
 .chart-flat .chart-line { stroke: var(--muted); }
 .chart-flat .chart-dot { fill: var(--muted); }
 .chart-flat .chart-area { fill: var(--muted); }
+.chart-fat .chart-line { stroke: var(--fat-color); }
+.chart-fat .chart-dot { fill: var(--fat-color); }
+.chart-fat .chart-area { fill: var(--fat-color); }
+.chart-muscle .chart-line { stroke: var(--muscle-color); }
+.chart-muscle .chart-dot { fill: var(--muscle-color); }
+.chart-muscle .chart-area { fill: var(--muscle-color); }
 .switch-label {
   display: flex;
   align-items: center;

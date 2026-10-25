@@ -1415,17 +1415,23 @@
     </svg>`;
   }
 
-  function renderBigFieldChart(containerEl, field, points, goalDirection) {
+  // fixedCls, when passed, overrides the usual trend-based good/bad/flat
+  // coloring with a constant class (e.g. 'fat'/'muscle') — used where color
+  // identifies WHICH metric this is rather than whether it's improving.
+  function renderBigFieldChart(containerEl, field, points, goalDirection, fixedCls) {
     if (points.length === 0) {
       containerEl.innerHTML = `<p class="muted mo-empty">لا توجد بيانات لهذا الحقل بعد</p>`;
       return;
     }
-    const values = points.map(p => p[field.key]);
-    const diff = round1(values[values.length - 1] - values[0]);
-    let statusCls = 'flat';
-    if (diff !== 0 && goalDirection) {
-      const improved = (goalDirection === 'down' && diff < 0) || (goalDirection === 'up' && diff > 0);
-      statusCls = improved ? 'good' : 'bad';
+    let statusCls = fixedCls;
+    if (!statusCls) {
+      const values = points.map(p => p[field.key]);
+      const diff = round1(values[values.length - 1] - values[0]);
+      statusCls = 'flat';
+      if (diff !== 0 && goalDirection) {
+        const improved = (goalDirection === 'down' && diff < 0) || (goalDirection === 'up' && diff > 0);
+        statusCls = improved ? 'good' : 'bad';
+      }
     }
 
     containerEl.innerHTML = `
@@ -1753,21 +1759,26 @@
     </svg>`;
   }
 
-  let selectedSegmentalField = null;
+  let selectedFatSegmentalField = null;
+  let selectedMuscleSegmentalField = null;
 
   function renderSegmentalDistribution() {
     const snapshotEl = document.getElementById('segmentalSnapshot');
-    const pillsEl = document.getElementById('segmentalFieldPills');
-    const chartEl = document.getElementById('segmentalBigChart');
+    const fatPillsEl = document.getElementById('segmentalFatPills');
+    const fatChartEl = document.getElementById('segmentalFatChart');
+    const musclePillsEl = document.getElementById('segmentalMusclePills');
+    const muscleChartEl = document.getElementById('segmentalMuscleChart');
     const emptyMsg = document.getElementById('segmentalEmptyMsg');
-    if (!snapshotEl || !pillsEl || !chartEl || !emptyMsg) return;
+    if (!snapshotEl || !fatPillsEl || !fatChartEl || !musclePillsEl || !muscleChartEl || !emptyMsg) return;
 
     const sorted = [...state.inbody].sort((a, b) => a.date.localeCompare(b.date));
     const hasAny = sorted.some(r => SEGMENTAL_FIELDS.some(f => r[f.key] !== null && r[f.key] !== undefined));
     if (!hasAny) {
       snapshotEl.innerHTML = '';
-      pillsEl.innerHTML = '';
-      chartEl.innerHTML = '';
+      fatPillsEl.innerHTML = '';
+      fatChartEl.innerHTML = '';
+      musclePillsEl.innerHTML = '';
+      muscleChartEl.innerHTML = '';
       emptyMsg.classList.remove('hidden');
       return;
     }
@@ -1800,7 +1811,7 @@
 
       return `
         <div class="segment-group">
-          <div class="segment-group-title">${title} — آخر قراءة (${formatDateAr(latestDate)})</div>
+          <div class="segment-group-title ${metric}">${title} — آخر قراءة (${formatDateAr(latestDate)})</div>
           <div class="body-diagram-figure">
             ${labels}
             ${bodyZoneSvg()}
@@ -1813,26 +1824,41 @@
 
     snapshotEl.innerHTML = buildGroup('fat', 'توزيع الدهون') + buildGroup('muscle', 'توزيع العضلات');
 
-    // Same pill-selector + single big chart pattern as the InBody/measurements
-    // overview, instead of a grid of small cards, for one consistent style.
-    const fieldsWithData = SEGMENTAL_FIELDS.filter(f => sorted.some(r => r[f.key] !== null && r[f.key] !== undefined));
-    if (!selectedSegmentalField || !fieldsWithData.some(f => f.key === selectedSegmentalField)) {
-      selectedSegmentalField = fieldsWithData[0].key;
-    }
+    // Fat and muscle each get their own pill-selector + big chart, colored
+    // by metric (red/green) so the two stay visually distinct — two
+    // sections instead of one mixed 10-pill list.
+    const renderMetricSection = (metric, pillsEl, chartEl, getSelected, setSelected) => {
+      const fieldsWithData = SEGMENTAL_FIELDS.filter(f => f.metric === metric && sorted.some(r => r[f.key] !== null && r[f.key] !== undefined));
+      if (fieldsWithData.length === 0) {
+        pillsEl.innerHTML = '';
+        chartEl.innerHTML = `<p class="muted mo-empty">لا توجد بيانات بعد لهذا الجانب</p>`;
+        return;
+      }
+      let selected = getSelected();
+      if (!selected || !fieldsWithData.some(f => f.key === selected)) {
+        selected = fieldsWithData[0].key;
+        setSelected(selected);
+      }
 
-    pillsEl.innerHTML = fieldsWithData.map(f => `
-      <button type="button" class="field-pill ${f.key === selectedSegmentalField ? 'active' : ''}" data-field-pill="${f.key}">${f.regionLabel} — ${f.metricLabel}</button>
-    `).join('');
-    pillsEl.querySelectorAll('[data-field-pill]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        selectedSegmentalField = btn.dataset.fieldPill;
-        renderSegmentalDistribution();
+      pillsEl.innerHTML = fieldsWithData.map(f => `
+        <button type="button" class="field-pill ${f.key === selected ? 'active' : ''}" data-field-pill="${f.key}">${f.regionLabel}</button>
+      `).join('');
+      pillsEl.querySelectorAll('[data-field-pill]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          setSelected(btn.dataset.fieldPill);
+          renderSegmentalDistribution();
+        });
       });
-    });
 
-    const field = fieldsWithData.find(f => f.key === selectedSegmentalField);
-    const points = sorted.filter(r => r[field.key] !== null && r[field.key] !== undefined);
-    renderBigFieldChart(chartEl, { ...field, label: `${field.regionLabel} — ${field.metricLabel}` }, points, segmentGoalDirection(field.metric));
+      const field = fieldsWithData.find(f => f.key === selected);
+      const points = sorted.filter(r => r[field.key] !== null && r[field.key] !== undefined);
+      renderBigFieldChart(chartEl, { ...field, label: field.regionLabel }, points, null, metric);
+    };
+
+    renderMetricSection('fat', fatPillsEl, fatChartEl,
+      () => selectedFatSegmentalField, v => { selectedFatSegmentalField = v; });
+    renderMetricSection('muscle', musclePillsEl, muscleChartEl,
+      () => selectedMuscleSegmentalField, v => { selectedMuscleSegmentalField = v; });
   }
 
   /* ============================ SETTINGS MODAL ============================ */
