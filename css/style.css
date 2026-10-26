@@ -984,3 +984,12 @@ tr.program-row td {
 }
 .program-badge { font-size: 0.85em; }
 
+/* ---------- weekly calorie-total row inserted between daily log rows ---------- */
+
+tr.week-total-row td {
+  background: var(--surface-2);
+  font-weight: 700;
+  color: var(--ink);
+  white-space: normal;
+}
+

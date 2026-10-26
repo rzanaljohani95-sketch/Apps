@@ -966,16 +966,13 @@
 
     const nums = k => dates.map(d => state.dailyLogs[d][k]).filter(v => v !== null && v !== undefined);
     const avg = arr => arr.length ? round1(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
-    const sum = arr => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0)) : null;
 
     const stepsAvg = avg(nums('steps'));
     const calAvg = avg(nums('calories'));
     const proteinAvg = avg(nums('protein'));
-    const calSum = sum(nums('calories'));
 
     const calAvgStatus = computeGoalStatus(calAvg, state.settings.calorieGoal, state.settings.calorieMarginPct);
     const proteinAvgStatus = computeGoalStatus(proteinAvg, state.settings.proteinGoal, state.settings.proteinMarginPct, true);
-    const calSumStatus = computeGoalStatus(calSum, state.settings.weeklyCalorieGoal, state.settings.calorieMarginPct);
 
     const statsEl = document.getElementById('weeklyStats');
     statsEl.innerHTML = `
@@ -983,7 +980,6 @@
       <div class="stat-box tile-2"><div class="stat-value">${calAvg ?? '—'}</div><div class="stat-label">متوسط السعرات اليومي</div>${goalBadgeHtml(calAvgStatus, 'سعرة', state.settings.calorieGoal, true)}</div>
       <div class="stat-box tile-3"><div class="stat-value">${proteinAvg ?? '—'} جم</div><div class="stat-label">متوسط البروتين اليومي</div>${goalBadgeHtml(proteinAvgStatus, 'جم', state.settings.proteinGoal, true)}</div>
       <div class="stat-box tile-4"><div class="stat-value">${workoutDays}</div><div class="stat-label">أيام تمرين هذا الأسبوع</div></div>
-      <div class="stat-box tile-2"><div class="stat-value">${calSum ?? '—'}</div><div class="stat-label">مجموع السعرات هذا الأسبوع (الهدف ${state.settings.weeklyCalorieGoal})</div>${goalBadgeHtml(calSumStatus, 'سعرة', state.settings.weeklyCalorieGoal, true)}</div>
     `;
   }
 
@@ -1047,11 +1043,58 @@
     return `${value}${goalBadgeHtml(status, 'جم', state.settings.proteinGoal, true)}`;
   }
 
+  // Groups logged days into the same "month = 4 weeks" chunks as the
+  // monthly goal chart (days 1-7/8-14/15-21/22-28), with 29-31 folded into
+  // week 4 so every logged day still counts toward some week's total
+  // (unlike that chart, this is a real sum — nothing can just drop off).
+  function weekChunkKey(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const w = Math.min(3, Math.floor((d.getDate() - 1) / 7));
+    return `${d.getFullYear()}-${d.getMonth()}-${w}`;
+  }
+  function weekChunkLabel(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const w = Math.min(3, Math.floor((d.getDate() - 1) / 7));
+    const monthLabel = d.toLocaleDateString('ar-u-ca-gregory', { month: 'long', year: 'numeric' });
+    return `الأسبوع ${AR_WEEK_ORDINALS[w]} — ${monthLabel}`;
+  }
+
+  function weeklyTotalRowHtml(datesInChunk, colspan) {
+    const hasAny = datesInChunk.some(d => state.dailyLogs[d].calories !== null && state.dailyLogs[d].calories !== undefined);
+    if (!hasAny) return '';
+    const total = datesInChunk.reduce((sum, d) => sum + (state.dailyLogs[d].calories ?? 0), 0);
+    const status = computeGoalStatus(total, state.settings.weeklyCalorieGoal, state.settings.calorieMarginPct);
+    const totalFmt = total.toLocaleString('en-US');
+    const goalFmt = state.settings.weeklyCalorieGoal.toLocaleString('en-US');
+    return `<tr class="week-total-row"><td colspan="${colspan}">${weekChunkLabel(datesInChunk[0])} — إجمالي السعرات: ${totalFmt} / ${goalFmt}${goalBadgeHtml(status, 'سعرة', state.settings.weeklyCalorieGoal, true)}</td></tr>`;
+  }
+
+  // dates: descending (newest first, this app's convention throughout).
+  // Walks runs of the same week-chunk and inserts that chunk's total row
+  // right after its days — i.e. at the chronological end of the week, which
+  // is where "end of week" actually falls reading top-to-bottom here.
+  function withWeeklyTotals(dates, rowBuilder, colspan) {
+    const pieces = [];
+    let i = 0;
+    while (i < dates.length) {
+      const key = weekChunkKey(dates[i]);
+      const chunk = [];
+      while (i < dates.length && weekChunkKey(dates[i]) === key) {
+        chunk.push(dates[i]);
+        pieces.push(rowBuilder(dates[i]));
+        i++;
+      }
+      pieces.push(weeklyTotalRowHtml(chunk, colspan));
+    }
+    return pieces.join('');
+  }
+
   function renderRecentDailyTable() {
     const tbody = document.querySelector('#recentDailyTable tbody');
     const dates = Object.keys(state.dailyLogs).sort().reverse();
-    tbody.innerHTML = dates.map(rowHtml).join('') ||
-      `<tr><td colspan="6" class="muted">لا توجد بيانات بعد</td></tr>`;
+    tbody.innerHTML = dates.length
+      ? withWeeklyTotals(dates, rowHtml, 6)
+      : `<tr><td colspan="6" class="muted">لا توجد بيانات بعد</td></tr>`;
     attachRowHandlers(tbody);
   }
 
@@ -1067,26 +1110,30 @@
       : label;
   }
 
+  function fullRowHtml(d) {
+    const e = state.dailyLogs[d];
+    const w = e.workout;
+    const details = w?.done ? [w.type, w.hiit ? 'HIIT 🔥' : null, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
+    return `<tr${isInProgramPeriod(d) ? ' class="program-row"' : ''}>
+      <td>${dateCellHtml(d)}</td>
+      <td>${e.steps ?? '—'}</td>
+      <td>${calorieCellHtml(e.calories)}</td>
+      <td>${proteinCellHtml(e.protein)}</td>
+      <td>${w?.done ? '✅' : '—'}</td>
+      <td>${details}</td>
+      <td class="row-actions">
+        <button class="btn-icon-small" data-edit="${d}" title="تعديل">✏️</button>
+        <button class="btn-icon-small" data-del="${d}" title="حذف">🗑️</button>
+      </td>
+    </tr>`;
+  }
+
   function renderFullDailyTable() {
     const tbody = document.querySelector('#fullDailyTable tbody');
     const dates = Object.keys(state.dailyLogs).sort().reverse();
-    tbody.innerHTML = dates.map(d => {
-      const e = state.dailyLogs[d];
-      const w = e.workout;
-      const details = w?.done ? [w.type, w.hiit ? 'HIIT 🔥' : null, formatDuration(w.duration), w.notes].filter(Boolean).join(' · ') : '—';
-      return `<tr${isInProgramPeriod(d) ? ' class="program-row"' : ''}>
-        <td>${dateCellHtml(d)}</td>
-        <td>${e.steps ?? '—'}</td>
-        <td>${calorieCellHtml(e.calories)}</td>
-        <td>${proteinCellHtml(e.protein)}</td>
-        <td>${w?.done ? '✅' : '—'}</td>
-        <td>${details}</td>
-        <td class="row-actions">
-          <button class="btn-icon-small" data-edit="${d}" title="تعديل">✏️</button>
-          <button class="btn-icon-small" data-del="${d}" title="حذف">🗑️</button>
-        </td>
-      </tr>`;
-    }).join('') || `<tr><td colspan="7" class="muted">لا توجد بيانات بعد</td></tr>`;
+    tbody.innerHTML = dates.length
+      ? withWeeklyTotals(dates, fullRowHtml, 7)
+      : `<tr><td colspan="7" class="muted">لا توجد بيانات بعد</td></tr>`;
     attachRowHandlers(tbody);
   }
 
