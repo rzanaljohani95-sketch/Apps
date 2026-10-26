@@ -69,6 +69,7 @@
       settings: {
         weeklyWorkoutGoal: 4,
         calorieGoal: 1810,
+        weeklyCalorieGoal: 11200,
         // Protein floor: any amount at/above this is fine (see
         // computeGoalStatus's overIsGood) — only falling under it matters,
         // so no cushion margin on top of the floor itself.
@@ -127,6 +128,7 @@
       settings: {
         weeklyWorkoutGoal: parsed.settings?.weeklyWorkoutGoal ?? base.settings.weeklyWorkoutGoal,
         calorieGoal: parsed.settings?.calorieGoal ?? base.settings.calorieGoal,
+        weeklyCalorieGoal: parsed.settings?.weeklyCalorieGoal ?? base.settings.weeklyCalorieGoal,
         proteinGoal: parsed.settings?.proteinGoal ?? base.settings.proteinGoal,
         calorieMarginPct: parsed.settings?.calorieMarginPct ?? base.settings.calorieMarginPct,
         proteinMarginPct: parsed.settings?.proteinMarginPct ?? base.settings.proteinMarginPct,
@@ -969,9 +971,11 @@
     const stepsAvg = avg(nums('steps'));
     const calAvg = avg(nums('calories'));
     const proteinAvg = avg(nums('protein'));
+    const calSum = sum(nums('calories'));
 
     const calAvgStatus = computeGoalStatus(calAvg, state.settings.calorieGoal, state.settings.calorieMarginPct);
     const proteinAvgStatus = computeGoalStatus(proteinAvg, state.settings.proteinGoal, state.settings.proteinMarginPct, true);
+    const calSumStatus = computeGoalStatus(calSum, state.settings.weeklyCalorieGoal, state.settings.calorieMarginPct);
 
     const statsEl = document.getElementById('weeklyStats');
     statsEl.innerHTML = `
@@ -979,6 +983,7 @@
       <div class="stat-box tile-2"><div class="stat-value">${calAvg ?? '—'}</div><div class="stat-label">متوسط السعرات اليومي</div>${goalBadgeHtml(calAvgStatus, 'سعرة', state.settings.calorieGoal, true)}</div>
       <div class="stat-box tile-3"><div class="stat-value">${proteinAvg ?? '—'} جم</div><div class="stat-label">متوسط البروتين اليومي</div>${goalBadgeHtml(proteinAvgStatus, 'جم', state.settings.proteinGoal, true)}</div>
       <div class="stat-box tile-4"><div class="stat-value">${workoutDays}</div><div class="stat-label">أيام تمرين هذا الأسبوع</div></div>
+      <div class="stat-box tile-2"><div class="stat-value">${calSum ?? '—'}</div><div class="stat-label">مجموع السعرات هذا الأسبوع (الهدف ${state.settings.weeklyCalorieGoal})</div>${goalBadgeHtml(calSumStatus, 'سعرة', state.settings.weeklyCalorieGoal, true)}</div>
     `;
   }
 
@@ -1890,6 +1895,7 @@
     document.getElementById('programStartInput').value = state.settings.programStartDate ?? '';
     document.getElementById('calorieGoalInput').value = state.settings.calorieGoal;
     document.getElementById('calorieMarginInput').value = state.settings.calorieMarginPct;
+    document.getElementById('weeklyCalorieGoalInput').value = state.settings.weeklyCalorieGoal;
     document.getElementById('proteinGoalInput').value = state.settings.proteinGoal;
     document.getElementById('proteinMarginInput').value = state.settings.proteinMarginPct;
     document.getElementById('periodLenInput').value = state.settings.periodLenOverride ?? '';
@@ -1912,6 +1918,7 @@
     state.settings.weeklyWorkoutGoal = Math.min(7, Math.max(1, goal));
     state.settings.programStartDate = document.getElementById('programStartInput').value || null;
     state.settings.calorieGoal = Number(document.getElementById('calorieGoalInput').value) || state.settings.calorieGoal;
+    state.settings.weeklyCalorieGoal = Number(document.getElementById('weeklyCalorieGoalInput').value) || state.settings.weeklyCalorieGoal;
     state.settings.proteinGoal = Number(document.getElementById('proteinGoalInput').value) || state.settings.proteinGoal;
     state.settings.calorieMarginPct = Math.max(0, Number(document.getElementById('calorieMarginInput').value) || 0);
     state.settings.proteinMarginPct = Math.max(0, Number(document.getElementById('proteinMarginInput').value) || 0);
