@@ -1044,47 +1044,90 @@
   }
 
   // Groups logged days into the same "month = 4 weeks" chunks as the
-  // monthly goal chart (days 1-7/8-14/15-21/22-28), with 29-31 folded into
-  // week 4 so every logged day still counts toward some week's total
-  // (unlike that chart, this is a real sum — nothing can just drop off).
+  // monthly goal chart (days 1-7/8-14/15-21/22-28). Days 29-31 fall outside
+  // this 28-day view — same trade-off as that chart — and get no week
+  // total at all (null key), rather than being folded into week 4, which
+  // would silently pad that week's total with days it never covered.
   function weekChunkKey(dateStr) {
     const d = new Date(dateStr + 'T00:00:00');
-    const w = Math.min(3, Math.floor((d.getDate() - 1) / 7));
+    if (d.getDate() > 28) return null;
+    const w = Math.floor((d.getDate() - 1) / 7);
     return `${d.getFullYear()}-${d.getMonth()}-${w}`;
   }
   function weekChunkLabel(dateStr) {
     const d = new Date(dateStr + 'T00:00:00');
-    const w = Math.min(3, Math.floor((d.getDate() - 1) / 7));
+    const w = Math.floor((d.getDate() - 1) / 7);
     const monthLabel = d.toLocaleDateString('ar-u-ca-gregory', { month: 'long', year: 'numeric' });
     return `الأسبوع ${AR_WEEK_ORDINALS[w]} — ${monthLabel}`;
   }
 
-  function weeklyTotalRowHtml(datesInChunk, colspan) {
-    const hasAny = datesInChunk.some(d => state.dailyLogs[d].calories !== null && state.dailyLogs[d].calories !== undefined);
-    if (!hasAny) return '';
-    const total = datesInChunk.reduce((sum, d) => sum + (state.dailyLogs[d].calories ?? 0), 0);
-    const status = computeGoalStatus(total, state.settings.weeklyCalorieGoal, state.settings.calorieMarginPct);
+  // A week chunk is "current" once today's date falls inside it — shown
+  // differently below since it hasn't finished yet (see weeklyTotalRowHtml).
+  function isCurrentWeekChunk(key) {
+    return key !== null && key === weekChunkKey(todayStr());
+  }
+
+  // One chunk can be in one of three states, each needing a different
+  // message so the row never implies more confidence than the data has:
+  //  - still running (today is inside it): running total + a per-day
+  //    budget for the rest of the week, no goal badge (nothing to judge yet).
+  //  - finished but under-logged (<7 days have a calories value): an
+  //    average over the logged days instead of a full-week total, since a
+  //    plain total/badge would read as "hit the goal" on 5 recorded days
+  //    exactly as it would on 7.
+  //  - finished and fully logged: the original total vs. goal with badge.
+  function weeklyTotalRowHtml(key, datesInChunk, colspan) {
+    if (key === null) return '';
+    const loggedDates = datesInChunk.filter(d => state.dailyLogs[d].calories !== null && state.dailyLogs[d].calories !== undefined);
+    if (!loggedDates.length) return '';
+    const total = loggedDates.reduce((sum, d) => sum + state.dailyLogs[d].calories, 0);
     const totalFmt = total.toLocaleString('en-US');
+    const label = weekChunkLabel(datesInChunk[0]);
+
+    if (isCurrentWeekChunk(key)) {
+      const d = new Date(todayStr() + 'T00:00:00');
+      const w = Math.floor((d.getDate() - 1) / 7);
+      const chunkEndDay = w * 7 + 7;
+      const todayLogged = loggedDates.includes(todayStr());
+      const daysLeft = Math.max(1, chunkEndDay - d.getDate() + (todayLogged ? 0 : 1));
+      const perDay = Math.round((state.settings.weeklyCalorieGoal - total) / daysLeft);
+      const perDayFmt = perDay.toLocaleString('en-US');
+      return `<tr class="week-total-row"><td colspan="${colspan}">${label} (الأسبوع الجاري) — السعرات حتى الآن: ${totalFmt} · المتبقي لكل يوم: ${perDayFmt}</td></tr>`;
+    }
+
+    if (loggedDates.length < 7) {
+      const avg = Math.round(total / loggedDates.length);
+      const avgFmt = avg.toLocaleString('en-US');
+      return `<tr class="week-total-row"><td colspan="${colspan}">${label} — ${avgFmt} متوسط · ${loggedDates.length} من 7 أيام</td></tr>`;
+    }
+
+    const status = computeGoalStatus(total, state.settings.weeklyCalorieGoal, state.settings.calorieMarginPct);
     const goalFmt = state.settings.weeklyCalorieGoal.toLocaleString('en-US');
-    return `<tr class="week-total-row"><td colspan="${colspan}">${weekChunkLabel(datesInChunk[0])} — إجمالي السعرات: ${totalFmt} / ${goalFmt}${goalBadgeHtml(status, 'سعرة', state.settings.weeklyCalorieGoal, true)}</td></tr>`;
+    return `<tr class="week-total-row"><td colspan="${colspan}">${label} — إجمالي السعرات: ${totalFmt} / ${goalFmt}${goalBadgeHtml(status, 'سعرة', state.settings.weeklyCalorieGoal, true)}</td></tr>`;
   }
 
   // dates: descending (newest first, this app's convention throughout).
   // Walks runs of the same week-chunk and inserts that chunk's total row
   // right after its days — i.e. at the chronological end of the week, which
   // is where "end of week" actually falls reading top-to-bottom here.
+  // Days 29-31 (null key) never group with each other — each stays its own
+  // single-day run so no spurious total row follows them.
   function withWeeklyTotals(dates, rowBuilder, colspan) {
     const pieces = [];
     let i = 0;
     while (i < dates.length) {
       const key = weekChunkKey(dates[i]);
-      const chunk = [];
-      while (i < dates.length && weekChunkKey(dates[i]) === key) {
-        chunk.push(dates[i]);
-        pieces.push(rowBuilder(dates[i]));
-        i++;
+      const chunk = [dates[i]];
+      pieces.push(rowBuilder(dates[i]));
+      i++;
+      if (key !== null) {
+        while (i < dates.length && weekChunkKey(dates[i]) === key) {
+          chunk.push(dates[i]);
+          pieces.push(rowBuilder(dates[i]));
+          i++;
+        }
       }
-      pieces.push(weeklyTotalRowHtml(chunk, colspan));
+      pieces.push(weeklyTotalRowHtml(key, chunk, colspan));
     }
     return pieces.join('');
   }
